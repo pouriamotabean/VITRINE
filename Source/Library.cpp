@@ -17,6 +17,7 @@ namespace
         o->setProperty ("uid", e.uid);
         o->setProperty ("instrument", e.isInstrument);
         o->setProperty ("favorite", e.favorite);
+        o->setProperty ("hidden", e.hidden);
         o->setProperty ("shortcut", e.shortcut);
         o->setProperty ("fileTime", e.fileTime);
         o->setProperty ("lastUsed", e.lastUsed);
@@ -39,6 +40,7 @@ namespace
         e.uid          = v["uid"].toString();
         e.isInstrument = (bool) v["instrument"];
         e.favorite     = (bool) v["favorite"];
+        e.hidden       = (bool) v["hidden"];
         e.shortcut     = v["shortcut"].toString();
         e.fileTime     = (juce::int64) v["fileTime"];
         e.lastUsed     = (juce::int64) v["lastUsed"];
@@ -273,6 +275,16 @@ void Library::toggleFavorite (const juce::String& id)
     if (auto* e = find (id))
     {
         e->favorite = ! e->favorite;
+        sendChangeMessage();
+        saveSoon();
+    }
+}
+
+void Library::setHidden (const juce::String& id, bool h)
+{
+    if (auto* e = find (id))
+    {
+        e->hidden = h;
         sendChangeMessage();
         saveSoon();
     }

@@ -28,6 +28,10 @@ private:
     void timerCallback() override;
     void applyView();
     void chooseFolder();
+    void toggleSidecar();
+    void rebuildViewBox();
+    void showMoreMenu();
+    bool isCompact() const { return getWidth() < 760; }
 
     Library& library;
     Scanner scanner;
@@ -39,6 +43,11 @@ private:
 
     juce::TextEditor search;
     juce::TextButton rescanButton { "Rescan" }, foldersButton { "Folders" };
+    juce::TextButton sidecarButton { "Sidecar" }, moreButton { "..." };
+    juce::ComboBox viewBox;
+    std::vector<ViewSel> viewChoices;
+    bool sidecar = false;
+    juce::Rectangle<int> boundsBeforeSidecar;
     juce::Slider sizeSlider;
 
     ViewSel view;

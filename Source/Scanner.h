@@ -37,6 +37,7 @@ private:
     juce::StringArray findVst2() const;
     std::vector<PluginEntry> scanVst3InChild (const juce::String& path, juce::ChildProcess& p, const juce::File& out);
     static PluginEntry fallbackEntry (const juce::String& path, const juce::String& format);
+    static std::vector<PluginEntry> readModuleInfo (const juce::String& path);
 
     std::map<juce::String, Known> cache;
     juce::StringArray extra;

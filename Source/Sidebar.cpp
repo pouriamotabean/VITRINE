@@ -32,6 +32,8 @@ void Sidebar::rebuild()
     { Row r { Row::item, "Favorites", count ({ ViewSel::favorites }), { ViewSel::favorites } }; r.star = true; add (r); }
     add ({ Row::item, "Recent", count ({ ViewSel::recent }), { ViewSel::recent } });
     add ({ Row::item, "Not used lately", count ({ ViewSel::forgotten }), { ViewSel::forgotten } });
+    if (const int nh = count ({ ViewSel::hidden }); nh > 0)
+        add ({ Row::item, "Hidden", nh, { ViewSel::hidden } });
 
     add ({ Row::header, "MY DECKS" });
     for (int i = 0; i < (int) library.decks().size(); ++i)
@@ -55,7 +57,8 @@ void Sidebar::rebuild()
     for (auto& m : library.allMakers())
     {
         ViewSel v; v.kind = ViewSel::maker; v.name = m;
-        makers.push_back ({ m, count (v) });
+        if (const int n = count (v); n > 0)
+            makers.push_back ({ m, n });
     }
     std::stable_sort (makers.begin(), makers.end(), [] (auto& a, auto& b) { return a.second > b.second; });
 

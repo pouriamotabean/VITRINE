@@ -4,7 +4,7 @@
 // What the grid is showing.
 struct ViewSel
 {
-    enum Kind { all, favorites, recent, forgotten, deck, category, maker };
+    enum Kind { all, favorites, recent, forgotten, deck, category, maker, hidden };
     Kind kind = all;
     int deckIndex = -1;         // for Kind::deck
     juce::String name;          // category or maker

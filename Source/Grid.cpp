@@ -69,6 +69,7 @@ void Grid::rebuild()
             case ViewSel::favorites: title = "FAVORITES"; break;
             case ViewSel::recent:    title = "RECENT"; break;
             case ViewSel::forgotten: title = "NOT USED IN 30 DAYS"; break;
+            case ViewSel::hidden:    title = "HIDDEN"; break;
             case ViewSel::deck:      title = juce::isPositiveAndBelow (view.deckIndex, (int) library.decks().size())
                                                  ? library.decks()[(size_t) view.deckIndex].name : juce::String(); break;
             case ViewSel::category:
@@ -357,6 +358,7 @@ void Grid::cardMenu (Card& c)
     m.addSubMenu ("Category", cats);
 
     m.addItem (4, "Show in folder", juce::File (e.path).exists());
+    m.addItem (6, e.hidden ? "Show again" : "Hide from Vitrine");
     m.addSeparator();
     m.addItem (5, e.format + (e.vstCategory.isNotEmpty() ? "  -  " + e.vstCategory : juce::String()), false);
 
@@ -373,6 +375,15 @@ void Grid::cardMenu (Card& c)
         else if (r == 2 && deckView >= 0) lib.removeFromDeck (deckView, id);
         else if (r == 3) lib.setUserCategory (id, en->autoCategory);
         else if (r == 4) juce::File (en->path).revealToUser();
+        else if (r == 6)
+        {
+            const bool hide = ! en->hidden;
+            const auto name = en->name;
+            lib.setHidden (id, hide);
+            if (safe->onToast)
+                safe->onToast (hide ? name + " hidden. Find it again under Hidden on the left."
+                                    : name + " is back.");
+        }
         else if (r == 99)
         {
             const int idx = lib.addDeck ("New deck");

@@ -18,12 +18,16 @@ namespace Filter
             if (juce::isPositiveAndBelow (v.deckIndex, (int) lib.decks().size()))
                 for (auto& id : lib.decks()[(size_t) v.deckIndex].ids)
                     if (auto* e = lib.find (id))
-                        r.push_back (e);
+                        if (! e->hidden)
+                            r.push_back (e);
             return r;
         }
 
         for (auto& e : items)
         {
+            if (e.hidden != (v.kind == ViewSel::hidden))
+                continue;
+
             bool ok = false;
             switch (v.kind)
             {
@@ -34,6 +38,7 @@ namespace Filter
                 case ViewSel::category:  ok = e.category() == v.name; break;
                 case ViewSel::maker:     ok = e.maker == v.name; break;
                 case ViewSel::deck:      break;
+                case ViewSel::hidden:    ok = true; break;
             }
             if (ok)
                 r.push_back (&e);

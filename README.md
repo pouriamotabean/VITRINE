@@ -2,6 +2,12 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.2.0
+
+- **Sidecar** button: a narrow window on the right edge of the screen, always on top of Cubase. **Wide** brings the big window back. Any narrow window switches to this compact layout by itself.
+- **Hide from Vitrine** (right-click a card): the plugin disappears from every view; files are not touched. Bring it back from **Hidden** on the left.
+- Faster, safer scan: most VST3 plugins are read from their own description file without starting them, so helper apps like UA Connect no longer pop up.
+
 ## Version 0.1.0
 
 - Finds your VST3 plugins (standard folders plus any folder you add with **Folders**) and lists VST2 plugins by file name.
@@ -18,6 +24,7 @@ A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument
 - Right-click a card: decks, favorite, change its category, show in folder.
 - **Search**: just start typing. Esc clears.
 - **SIZE** slider: card size.
+- Drag-and-drop from Vitrine into Cubase is not possible (Cubase does not accept plugins dropped from other apps). Loading will be one click on a card, via the Cubase link.
 
 Your library is saved in `%APPDATA%\Vitrine\library.json`.
 

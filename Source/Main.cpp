@@ -69,7 +69,7 @@ private:
             setUsingNativeTitleBar (true);
             setContentOwned (new MainComponent (lib, scan), false);
             setResizable (true, true);
-            setResizeLimits (900, 560, 10000, 10000);
+            setResizeLimits (380, 420, 10000, 10000);
 
             const auto state = Library::dataFolder().getChildFile ("window.txt").loadFileAsString();
             if (state.isNotEmpty()) restoreWindowStateFromString (state);

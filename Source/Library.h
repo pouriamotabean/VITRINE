@@ -16,6 +16,7 @@ struct PluginEntry
     juce::String uid;           // VST3 class id (for loading in Cubase later)
     bool isInstrument = false;
     bool favorite = false;
+    bool hidden = false;        // hidden from Vitrine by the user (files untouched)
     juce::String shortcut;      // key badge (session 3)
     juce::int64 fileTime = 0;
     juce::int64 lastUsed = 0;   // ms since epoch, 0 = never
@@ -61,6 +62,7 @@ public:
 
     // user state
     void toggleFavorite (const juce::String& id);
+    void setHidden (const juce::String& id, bool hidden);
     void setUserCategory (const juce::String& id, const juce::String& cat);
     void markUsed (const juce::String& id);
 

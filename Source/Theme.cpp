@@ -202,12 +202,18 @@ namespace Theme
         setColour (juce::TooltipWindow::textColourId, text);
         setColour (juce::TooltipWindow::outlineColourId, line);
         setColour (juce::Label::textColourId, text);
+        setColour (juce::ComboBox::backgroundColourId, panel);
+        setColour (juce::ComboBox::textColourId, text);
+        setColour (juce::ComboBox::outlineColourId, line);
+        setColour (juce::ComboBox::arrowColourId, dim);
+        setColour (juce::ComboBox::focusedOutlineColourId, accent);
     }
 
     juce::Font LookAndFeel::getPopupMenuFont()                  { return font (15.0f); }
     juce::Font LookAndFeel::getTextButtonFont (juce::TextButton&, int) { return font (14.0f); }
     juce::Font LookAndFeel::getAlertWindowMessageFont()         { return font (15.0f); }
     juce::Font LookAndFeel::getAlertWindowTitleFont()           { return font (17.0f, true); }
+    juce::Font LookAndFeel::getComboBoxFont (juce::ComboBox&)   { return font (14.5f); }
 
     void LookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int w, int h)
     {

@@ -163,6 +163,79 @@ std::vector<PluginEntry> Scanner::scanVst3InChild (const juce::String& path, juc
     return r;
 }
 
+// Modern VST3 bundles describe themselves in Contents/Resources/moduleinfo.json.
+// Reading it needs no plugin code at all: faster, and companion apps such as
+// UA Connect are not started.
+std::vector<PluginEntry> Scanner::readModuleInfo (const juce::String& path)
+{
+    std::vector<PluginEntry> r;
+    const juce::File bundle (path);
+    const auto info = bundle.getChildFile ("Contents").getChildFile ("Resources").getChildFile ("moduleinfo.json");
+    if (! info.existsAsFile())
+        return r;
+
+    // the file is JSON5: allow comments and trailing commas
+    juce::String text;
+    for (auto line : juce::StringArray::fromLines (info.loadFileAsString()))
+    {
+        const auto t = line.trimStart();
+        if (! t.startsWith ("//"))
+            text << line << "\n";
+    }
+    {
+        // drop commas that are followed only by whitespace and a closing bracket
+        juce::String out;
+        for (int i = 0; i < text.length(); ++i)
+        {
+            if (text[i] == ',')
+            {
+                int k = i + 1;
+                while (k < text.length() && juce::CharacterFunctions::isWhitespace (text[k])) ++k;
+                if (k < text.length() && (text[k] == '}' || text[k] == ']'))
+                    continue;
+            }
+            out << juce::String::charToString (text[i]);
+        }
+        text = out;
+    }
+
+    juce::var root;
+    if (juce::JSON::parse (text, root).failed())
+        return r;
+
+    const auto factoryVendor = root["Factory Info"]["Vendor"].toString();
+    const auto fileTime = bundle.getLastModificationTime().toMilliseconds();
+
+    if (auto* classes = root["Classes"].getArray())
+        for (auto& c : *classes)
+        {
+            if (c["Category"].toString() != "Audio Module Class")
+                continue;
+
+            juce::StringArray subs;
+            if (auto* s = c["Sub Categories"].getArray())
+                for (auto& x : *s) subs.add (x.toString());
+            else
+                subs.addTokens (c["Sub Categories"].toString(), "|", "");
+
+            PluginEntry e;
+            e.format = "VST3";
+            e.path = path;
+            e.name = c["Name"].toString();
+            e.maker = c["Vendor"].toString().isNotEmpty() ? c["Vendor"].toString() : factoryVendor;
+            e.vstCategory = subs.joinIntoString ("|");
+            e.isInstrument = subs.contains ("Instrument", true);
+            e.uid = c["CID"].toString();
+            e.fileTime = fileTime;
+            if (e.name.isEmpty())
+                continue;
+            e.id = makeId ("VST3", path, e.name);
+            r.push_back (e);
+        }
+
+    return r;
+}
+
 void Scanner::run()
 {
     const auto vst3 = findVst3();
@@ -187,6 +260,16 @@ void Scanner::run()
         {
             ids3.addArray (it->second.ids);
             std::lock_guard<std::mutex> g (lock);
+            ++progress.done;
+        }
+        else if (auto quick = readModuleInfo (path); ! quick.empty())
+        {
+            std::lock_guard<std::mutex> g (lock);
+            for (auto& e : quick)
+            {
+                ids3.add (e.id);
+                pending.push_back (e);
+            }
             ++progress.done;
         }
         else

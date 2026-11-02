@@ -35,5 +35,6 @@ namespace Theme
         juce::Font getTextButtonFont (juce::TextButton&, int) override;
         juce::Font getAlertWindowMessageFont() override;
         juce::Font getAlertWindowTitleFont() override;
+        juce::Font getComboBoxFont (juce::ComboBox&) override;
     };
 }
