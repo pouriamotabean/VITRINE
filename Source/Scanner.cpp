@@ -93,7 +93,30 @@ juce::StringArray Scanner::findVst2() const
         if (v.isNotEmpty())
             folders.addIfNotAlreadyThere (v);
     }
+
+    // the VST2 folders set in Cubase itself (Plug-in Manager > VST 2 paths):
+    // %APPDATA%\Steinberg\Cubase <n>_64\Vst2xPlugin Paths.xml (any version)
+    const auto steinberg = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Steinberg");
+    for (const auto& d : steinberg.findChildFiles (juce::File::findDirectories, false))
+        for (const auto& xmlFile : d.findChildFiles (juce::File::findFiles, false, "Vst2x*Path*.xml"))
+        {
+            // take every quoted value or tag text that is an existing folder
+            const auto text = xmlFile.loadFileAsString();
+            juce::StringArray tokens;
+            tokens.addTokens (text, "\"<>", "");
+            for (auto t : tokens)
+            {
+                t = t.trim();
+                if (t.length() > 3 && t[1] == ':' && juce::File::isAbsolutePath (t) && juce::File (t).isDirectory())
+                    folders.addIfNotAlreadyThere (juce::File (t).getFullPathName());
+            }
+        }
    #endif
+
+    // folders added by the user (More > Folders) are searched for VST2 too
+    for (auto& f : extra)
+        if (juce::File (f).isDirectory())
+            folders.addIfNotAlreadyThere (f);
 
     juce::StringArray dlls;
     for (auto& f : folders)
@@ -360,13 +383,13 @@ void Scanner::run()
     juce::StringArray vst3Names;
     {
         for (auto& id : ids3)
-            vst3Names.add (id.fromLastOccurrenceOf ("|", false, false).toLowerCase());
+            vst3Names.add (id.fromLastOccurrenceOf ("|", false, false).toLowerCase().removeCharacters (" -_"));
     }
 
     for (auto& path : vst2)
     {
         auto e = fallbackEntry (path, "VST2");
-        if (! vst3Names.contains (e.name.toLowerCase()))
+        if (! vst3Names.contains (e.name.toLowerCase().removeCharacters (" -_")))
         {
             ids2.add (e.id);
             std::lock_guard<std::mutex> g (lock);

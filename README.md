@@ -2,6 +2,11 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.6.1
+
+- VST2 plugins are also found in the VST2 folders set in Cubase (Plug-in Manager), and in the folders added under More > Folders (e.g. C:\64\SoundToys).
+- A VST2 plugin that also exists as VST3 (e.g. "LittleAlterBoy" / "Little AlterBoy") shows only once.
+
 ## Version 0.6.0
 
 - **Ready-made pictures first**, without opening any plugin:
