@@ -106,6 +106,7 @@ void Library::load()
     if (root.hasProperty ("sort"))
         sort = (Sort) juce::jlimit (0, 2, (int) root["sort"]);
 
+    cidPassDone = (bool) root.getProperty ("cidPassDone", false);
     if (root.hasProperty ("sidecarColumns"))
         sidecarColumns = juce::jlimit (1, 3, (int) root["sidecarColumns"]);
 
@@ -154,6 +155,7 @@ void Library::save()
     root->setProperty ("extraFolders", fs);
     root->setProperty ("cardWidth", cardWidth);
     root->setProperty ("sidecarColumns", sidecarColumns);
+    root->setProperty ("cidPassDone", cidPassDone);
     root->setProperty ("sort", (int) sort);
 
     const auto file = dataFolder().getChildFile ("library.json");

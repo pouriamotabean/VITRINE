@@ -87,6 +87,7 @@ public:
     juce::StringArray extraFolders;      // extra VST3 search folders chosen by the user
     int cardWidth = 210;                 // card size in the big window
     int sidecarColumns = 2;              // columns in the narrow window
+    bool cidPassDone = false;            // plugins were read once to get their class ids
     enum class Sort { name, leastUsed, mostUsed };
     Sort sort = Sort::name;
 

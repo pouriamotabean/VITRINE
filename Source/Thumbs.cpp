@@ -32,6 +32,62 @@ namespace Thumbs
 
     bool hasPicture (const PluginEntry& e) { return fileFor (e).existsAsFile(); }
 
+    juce::File readyMadeFor (const PluginEntry& e)
+    {
+        const auto cid = e.uid.toUpperCase();
+        if (cid.length() != 32 || ! cid.containsOnly ("0123456789ABCDEF"))
+            return {};
+
+        // Cubase's picture (made in Cubase, or by Cubase itself)
+        const auto cubaseDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                   .getChildFile ("Steinberg").getChildFile ("VST Thumbnails");
+        for (auto name : { cid + ".png", cid.toLowerCase() + ".png" })
+        {
+            const auto f = cubaseDir.getChildFile (name);
+            if (f.existsAsFile()) return f;
+        }
+
+        // the maker's picture inside the plugin bundle (sharpest first)
+        const auto snaps = juce::File (e.path).getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Snapshots");
+        if (snaps.isDirectory())
+            for (auto suffix : { "_snapshot_2.0x.png", "_snapshot.png", "_snapshot_1.5x.png" })
+                for (const auto& f : snaps.findChildFiles (juce::File::findFiles, false, "*" + juce::String (suffix)))
+                    if (f.getFileName().startsWithIgnoreCase (cid))
+                        return f;
+
+        return {};
+    }
+
+    int importReadyMade (std::vector<PluginEntry>& items)
+    {
+        int added = 0;
+        for (auto& e : items)
+        {
+            if (e.hidden) continue;
+            const auto own = fileFor (e);
+            if (own.existsAsFile() && ! pictureLooksBad (e)) continue;
+
+            const auto src = readyMadeFor (e);
+            if (! src.existsAsFile()) continue;
+
+            auto img = juce::ImageFileFormat::loadFrom (src);
+            if (! img.isValid()) continue;
+            if (img.getWidth() > 640)
+                img = img.rescaled (640, juce::roundToInt (img.getHeight() * 640.0 / img.getWidth()), juce::Graphics::highResamplingQuality);
+
+            own.getParentDirectory().createDirectory();
+            own.deleteFile();
+            juce::FileOutputStream os (own);
+            if (os.openedOk() && juce::PNGImageFormat().writeImageToStream (img, os))
+            {
+                os.flush();
+                e.noPicture = false;
+                ++added;
+            }
+        }
+        return added;
+    }
+
     bool pictureLooksBad (const PluginEntry& e)
     {
         const auto img = juce::ImageCache::getFromFile (fileFor (e));

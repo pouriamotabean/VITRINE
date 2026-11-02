@@ -11,6 +11,13 @@ namespace Thumbs
     void draw (juce::Graphics& g, juce::Rectangle<float> r, const PluginEntry& e, float corner);
     bool hasPicture (const PluginEntry& e);
     bool pictureLooksBad (const PluginEntry& e);   // saved picture is mostly black / half drawn
+
+    // Copies ready-made pictures into Vitrine, without opening any plugin:
+    //   1. Cubase's own plugin pictures: Documents\Steinberg\VST Thumbnails\<class id>.png
+    //   2. the maker's picture inside the plugin: <bundle>\Contents\Resources\Snapshots\<class id>_snapshot.png
+    // Only for plugins without a picture (or with a black one). Returns how many were added.
+    int importReadyMade (std::vector<PluginEntry>& items);
+    juce::File readyMadeFor (const PluginEntry& e);
     void migrateOldFiles (const std::vector<PluginEntry>& items);   // pictures of version 0.4.0 -> new names
 
     // child-process entry point: open the plugin's window, photograph it, write a PNG

@@ -2,6 +2,15 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.6.0
+
+- **Ready-made pictures first**, without opening any plugin:
+  1. Cubase's own plugin pictures (Documents\Steinberg\VST Thumbnails, named by the plugin's class id),
+  2. the maker's picture inside the plugin (Contents\Resources\Snapshots).
+  They are copied at start-up, after each scan and before "Take pictures"; only plugins without a picture (or with a black one) get them. Pictures you chose yourself are never replaced.
+- The next scan reads each plugin's class id once (needed to match Cubase's pictures). Your categories, decks, counters and pictures stay.
+- Right-click a card: "Use Cubase's / the maker's picture".
+
 ## Version 0.5.2
 
 - Pictures of plugins inside shells (Waves) work: only the one plugin is opened, not the whole shell.

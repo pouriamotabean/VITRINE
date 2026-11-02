@@ -152,7 +152,8 @@ std::vector<PluginEntry> Scanner::scanVst3InChild (const juce::String& path, juc
             e.maker = d.manufacturerName;
             e.vstCategory = d.category;
             e.isInstrument = d.isInstrument;
-            e.uid = d.createIdentifierString();
+            e.uid = child->getStringAttribute ("vitrineCid");          // 32 hex class id (Cubase's picture name)
+            if (e.uid.isEmpty()) e.uid = d.createIdentifierString();
             e.fileTime = fileTime;
             e.id = makeId ("VST3", path, e.name);
             r.push_back (e);
@@ -225,7 +226,7 @@ std::vector<PluginEntry> Scanner::readModuleInfo (const juce::String& path)
             e.maker = c["Vendor"].toString().isNotEmpty() ? c["Vendor"].toString() : factoryVendor;
             e.vstCategory = subs.joinIntoString ("|");
             e.isInstrument = subs.contains ("Instrument", true);
-            e.uid = c["CID"].toString();
+            e.uid = c["CID"].toString().toUpperCase().retainCharacters ("0123456789ABCDEF");
             e.fileTime = fileTime;
             if (e.name.isEmpty())
                 continue;
@@ -446,7 +447,7 @@ namespace
         return {};
     }
 
-    bool fastFactoryList (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found)
+    bool fastFactoryList (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found, juce::StringArray* cids)
     {
         const auto bin = vst3Binary (juce::File (path));
         if (! bin.existsAsFile()) return false;
@@ -504,42 +505,51 @@ namespace
                 for (auto x : l) uni = uni * 31 + x;
                 d->deprecatedUid = (int) dep;
                 d->uniqueId = (int) uni;
+                if (cids != nullptr)
+                    cids->add (juce::String::formatted ("%08X%08X%08X%08X", l[0], l[1], l[2], l[3]));
             }
             d->name = d->name.trim();
             if (d->name.isNotEmpty())
                 found.add (d.release());
+            else if (cids != nullptr && ! cids->isEmpty())
+                cids->remove (cids->size() - 1);
         }
         f2->release();
         return ! found.isEmpty();
     }
 }
 #else
-namespace { bool fastFactoryList (const juce::String&, juce::OwnedArray<juce::PluginDescription>&) { return false; } }
+namespace { bool fastFactoryList (const juce::String&, juce::OwnedArray<juce::PluginDescription>&, juce::StringArray*) { return false; } }
 
 #endif
 
 bool Scanner::listVst3Fast (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found)
 {
-    return fastFactoryList (path, found);
+    return fastFactoryList (path, found, nullptr);
 }
 
 int Scanner::runChildScan (const juce::String& path, const juce::File& out)
 {
     juce::OwnedArray<juce::PluginDescription> found;
+    juce::StringArray cids;
 
     // 1) fast: ask the plugin's factory for its list (no plugin is created)
-    if (! fastFactoryList (path, found))
+    if (! fastFactoryList (path, found, &cids))
     {
         // 2) JUCE's full scan
         found.clear();
+        cids.clear();
         juce::VST3PluginFormat fmt;
         fmt.findAllTypesForFile (found, path);
     }
 
     juce::XmlElement root ("SCAN");
-    for (auto* d : found)
-        if (auto x = d->createXml())
+    for (int i = 0; i < found.size(); ++i)
+        if (auto x = found[i]->createXml())
+        {
+            if (i < cids.size()) x->setAttribute ("vitrineCid", cids[i]);
             root.addChildElement (x.release());
+        }
 
     return root.writeTo (out) ? (found.isEmpty() ? 2 : 0) : 1;
 }

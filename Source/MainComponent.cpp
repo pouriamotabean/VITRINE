@@ -1,3 +1,4 @@
+#include <set>
 #include "MainComponent.h"
 #include "Categories.h"
 #include "Filter.h"
@@ -114,6 +115,17 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     });
     registerShortcuts();
 
+    juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<MainComponent> (this)]
+    {
+        if (safe == nullptr) return;
+        if (const int n = Thumbs::importReadyMade (safe->library.plugins()); n > 0)
+        {
+            safe->library.saveSoon();
+            safe->grid.repaint();
+            safe->showToast (juce::String (n) + " pictures taken from Cubase / the plugins themselves.", 4500);
+        }
+    });
+
     link.onStateChange = [this] { repaint(); };
     link.onResult = [this] (bool ok, const juce::String& t) { showToast ((ok ? "" : "Cubase: ") + t, ok ? 2600 : 5200); };
     link.onDump = [this] (const juce::String& t)
@@ -154,15 +166,24 @@ void MainComponent::startScan()
         return;
 
     std::map<juce::String, Scanner::Known> cache;
+    std::set<juce::String> readAgain;
     for (auto& e : library.plugins())
         if (e.format == "VST3")
         {
-            if (e.uid.isEmpty())        // listed only by file name last time (e.g. a Waves shell): read it again
+            const bool hasCid = e.uid.length() == 32 && e.uid.containsOnly ("0123456789ABCDEF");
+            // listed only by file name last time (e.g. a Waves shell), or no class id yet (needed for
+            // Cubase's pictures; read once): read the whole file again
+            if (e.uid.isEmpty() || (! hasCid && ! library.cidPassDone))
+            {
+                readAgain.insert (e.path.toLowerCase());
                 continue;
+            }
             auto& k = cache[e.path.toLowerCase()];
             k.fileTime = e.fileTime;
             k.ids.add (e.id);
         }
+    for (auto& p : readAgain) cache.erase (p);
+    library.cidPassDone = true;
 
     scanner.start (std::move (cache), library.extraFolders);
     scanText = "Looking for plugins...";
@@ -443,6 +464,20 @@ void MainComponent::showMainMenu()
 void MainComponent::startPictures (juce::StringArray ids, bool askFirst)
 {
     if (picProc != nullptr) return;
+
+    // first the ready-made pictures (instant, no plugin is opened)
+    if (const int n = Thumbs::importReadyMade (library.plugins()); n > 0)
+    {
+        library.saveSoon();
+        grid.repaint();
+        showToast (juce::String (n) + " pictures taken from Cubase / the plugins themselves.", 4000);
+        juce::StringArray still;
+        for (auto& id : ids)
+            if (auto* e = library.find (id))
+                if (! Thumbs::hasPicture (*e) || Thumbs::pictureLooksBad (*e)) still.add (id);
+        if (! ids.isEmpty() && still.isEmpty()) return;
+        ids = still;
+    }
 
     if (ids.isEmpty())
         for (auto& e : library.plugins())
@@ -754,6 +789,8 @@ void MainComponent::timerCallback()
     {
         library.removeMissing (v3, "VST3");
         library.removeMissing (v2, "VST2");
+        if (const int n = Thumbs::importReadyMade (library.plugins()); n > 0)
+            showToast (juce::String (n) + " pictures taken from Cubase / the plugins themselves.", 4500);
         library.save();
         scanText = {};
         showToast (juce::String ((int) library.plugins().size()) + " plugins in your library.");
