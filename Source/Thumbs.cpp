@@ -1,3 +1,4 @@
+#include <set>
 #include "Thumbs.h"
 #include "Theme.h"
 #include "WinHelpers.h"
@@ -32,6 +33,18 @@ namespace Thumbs
 
     bool hasPicture (const PluginEntry& e) { return fileFor (e).existsAsFile(); }
 
+    int deleteOrphans (const std::vector<PluginEntry>& items)
+    {
+        const auto dir = Library::dataFolder().getChildFile ("thumbs");
+        if (! dir.isDirectory() || items.empty()) return 0;
+        std::set<juce::String> used;
+        for (auto& e : items) used.insert (fileFor (e).getFileName().toLowerCase());
+        int n = 0;
+        for (const auto& f : dir.findChildFiles (juce::File::findFiles, false, "*"))
+            if (used.count (f.getFileName().toLowerCase()) == 0 && f.deleteFile()) ++n;
+        return n;
+    }
+
     juce::File readyMadeFor (const PluginEntry& e)
     {
         const auto cid = e.uid.toUpperCase();
@@ -41,6 +54,11 @@ namespace Thumbs
         // Cubase's picture (made in Cubase, or by Cubase itself)
         const auto cubaseDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                                    .getChildFile ("Steinberg").getChildFile ("VST Thumbnails");
+        if (e.format == "VST2")
+        {
+            const auto f = cubaseDir.getChildFile (cid + ".png");
+            return f.existsAsFile() ? f : juce::File();
+        }
         for (auto name : { cid + ".png", cid.toLowerCase() + ".png" })
         {
             const auto f = cubaseDir.getChildFile (name);
@@ -58,8 +76,60 @@ namespace Thumbs
         return {};
     }
 
+    namespace
+    {
+        juce::File cubaseThumbDir()
+        {
+            return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                       .getChildFile ("Steinberg").getChildFile ("VST Thumbnails");
+        }
+
+        juce::String squash (const juce::String& s)
+        {
+            return s.toLowerCase().retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789");
+        }
+
+        // VST2 plugins have no class id of their own. Cubase gives them one built as
+        // "VS?" + the plugin's 4-byte id + the first 9 letters of its name (lower case),
+        // and names its picture after it. The name part is read back from the file name
+        // and matched with the plugin's name, so no plugin has to be opened.
+        void matchVst2Ids (std::vector<PluginEntry>& items)
+        {
+            struct Thumb { juce::String cid, name; };
+            std::vector<Thumb> thumbs;
+            for (const auto& f : cubaseThumbDir().findChildFiles (juce::File::findFiles, false, "*.png"))
+            {
+                const auto cid = f.getFileNameWithoutExtension().toUpperCase();
+                if (cid.length() != 32 || ! cid.containsOnly ("0123456789ABCDEF") || ! cid.startsWith ("5653"))
+                    continue;
+                juce::String name;
+                for (int i = 14; i < 32; i += 2)
+                {
+                    const auto c = (char) cid.substring (i, i + 2).getHexValue32();
+                    if (c == 0) break;
+                    name += juce::String::charToString ((juce::juce_wchar) (juce::uint8) c);
+                }
+                name = squash (name);
+                if (name.length() >= 3) thumbs.push_back ({ cid, name });
+            }
+            if (thumbs.empty()) return;
+
+            for (auto& e : items)
+            {
+                if (e.format != "VST2") continue;
+                const auto n = squash (e.name);
+                const Thumb* best = nullptr;
+                for (auto& t : thumbs)
+                    if ((n.startsWith (t.name) || t.name.startsWith (n)) && (best == nullptr || t.name.length() > best->name.length()))
+                        best = &t;
+                if (best != nullptr) e.uid = best->cid;
+            }
+        }
+    }
+
     int importReadyMade (std::vector<PluginEntry>& items)
     {
+        matchVst2Ids (items);
         int added = 0;
         for (auto& e : items)
         {

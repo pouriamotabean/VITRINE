@@ -18,6 +18,7 @@ namespace Thumbs
     // Only for plugins without a picture (or with a black one). Returns how many were added.
     int importReadyMade (std::vector<PluginEntry>& items);
     juce::File readyMadeFor (const PluginEntry& e);
+    int deleteOrphans (const std::vector<PluginEntry>& items);   // pictures of plugins no longer in the library
     void migrateOldFiles (const std::vector<PluginEntry>& items);   // pictures of version 0.4.0 -> new names
 
     // child-process entry point: open the plugin's window, photograph it, write a PNG

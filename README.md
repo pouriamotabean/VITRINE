@@ -2,6 +2,11 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.6.3
+
+- VST2 plugins get Cubase's pictures too: Vitrine reads the plugin name hidden in the picture's file name and matches it (no plugin is opened).
+- When a plugin leaves the library (uninstalled, or a wrong card from 0.6.1), its picture is deleted from disk and it is taken out of your decks. Vitrine never deletes plugin files.
+
 ## Version 0.6.2
 
 - Fixed: 0.6.1 added many files that are not plugins (helper DLLs from the folders it searched). Every VST2 file is now checked before it is listed: it must be a 64-bit DLL that exports VSTPluginMain. The wrong cards disappear on the next Rescan.

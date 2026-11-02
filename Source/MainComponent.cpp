@@ -795,6 +795,7 @@ void MainComponent::timerCallback()
     {
         library.removeMissing (v3, "VST3");
         library.removeMissing (v2, "VST2");
+        Thumbs::deleteOrphans (library.plugins());     // pictures of removed plugins are deleted from disk
         if (const int n = Thumbs::importReadyMade (library.plugins()); n > 0)
             showToast (juce::String (n) + " pictures taken from Cubase / the plugins themselves.", 4500);
         library.save();

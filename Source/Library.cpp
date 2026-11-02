@@ -206,6 +206,12 @@ void Library::removeMissing (const juce::StringArray& keepIds, const juce::Strin
 
     if (items.size() != before)
     {
+        juce::StringArray alive;
+        for (auto& e : items) alive.add (e.id);
+        for (auto& d : deckList)
+            for (int i = d.ids.size(); --i >= 0;)
+                if (! alive.contains (d.ids[i])) d.ids.remove (i);
+
         sendChangeMessage();
         saveSoon();
     }
