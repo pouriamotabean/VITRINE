@@ -1,0 +1,30 @@
+name: Build Vitrine
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item build/Vitrine_artefacts/Release/Vitrine.exe dist/Vitrine.exe
+          Copy-Item README.md dist/README.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vitrine
+          path: dist/
