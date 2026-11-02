@@ -490,8 +490,22 @@ namespace
             d->pluginFormatName = "VST3";
             d->fileOrIdentifier = path;
             d->version = juce::String (ci.version);
-            d->uniqueId = (int) juce::String::toHexString (ci.cid, 16, 0).hashCode();
-            d->deprecatedUid = d->uniqueId;
+            // the same ids JUCE computes, so JUCE can open this exact plugin later
+            {
+                juce::uint32 dep = 0;
+                for (int k = 0; k < 16; ++k) dep = dep * 31 + (juce::uint32) (juce::int8) ci.cid[k];
+                const unsigned char* b = ci.cid;
+                const juce::uint32 l[4] = {
+                    (juce::uint32) b[0] | ((juce::uint32) b[1] << 8) | ((juce::uint32) b[2] << 16) | ((juce::uint32) b[3] << 24),
+                    ((juce::uint32) b[4] << 16) | ((juce::uint32) b[5] << 24) | (juce::uint32) b[6] | ((juce::uint32) b[7] << 8),
+                    ((juce::uint32) b[8] << 24) | ((juce::uint32) b[9] << 16) | ((juce::uint32) b[10] << 8) | (juce::uint32) b[11],
+                    ((juce::uint32) b[12] << 24) | ((juce::uint32) b[13] << 16) | ((juce::uint32) b[14] << 8) | (juce::uint32) b[15] };
+                juce::uint32 uni = 0;
+                for (auto x : l) uni = uni * 31 + x;
+                d->deprecatedUid = (int) dep;
+                d->uniqueId = (int) uni;
+            }
+            d->name = d->name.trim();
             if (d->name.isNotEmpty())
                 found.add (d.release());
         }
@@ -501,7 +515,13 @@ namespace
 }
 #else
 namespace { bool fastFactoryList (const juce::String&, juce::OwnedArray<juce::PluginDescription>&) { return false; } }
+
 #endif
+
+bool Scanner::listVst3Fast (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found)
+{
+    return fastFactoryList (path, found);
+}
 
 int Scanner::runChildScan (const juce::String& path, const juce::File& out)
 {

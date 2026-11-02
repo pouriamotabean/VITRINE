@@ -31,6 +31,9 @@ public:
     // child-process entry point: scan one VST3 file, write XML, return exit code
     static int runChildScan (const juce::String& path, const juce::File& out);
 
+    // Windows: list the plugins inside a VST3 file straight from its factory (no plugin is created)
+    static bool listVst3Fast (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found);
+
 private:
     void run() override;
     juce::StringArray findVst3() const;

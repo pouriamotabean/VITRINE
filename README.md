@@ -2,6 +2,12 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.5.2
+
+- Pictures of plugins inside shells (Waves) work: only the one plugin is opened, not the whole shell.
+- Pictures wait longer for the plugin to draw and keep the most complete of several shots (fewer black or half-drawn pictures).
+- More > "Retake pictures that look black or half drawn" finds such pictures and takes them again. "Retake pictures that failed" now also covers the Waves plugins that failed before.
+
 ## Version 0.5.1
 
 - Plugin "shells" (e.g. Waves: one VST3 file holding hundreds of plugins) are now read completely: every plugin inside gets its own card. The list is read from the plugin's own factory without starting each plugin, and the scan waits longer for such files.

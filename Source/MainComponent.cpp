@@ -386,6 +386,7 @@ void MainComponent::showMainMenu()
     m.addSeparator();
     m.addItem (3, "Take pictures of all plugins...", picProc == nullptr);
     m.addItem (4, "Retake pictures that failed", picProc == nullptr);
+    m.addItem (8, "Retake pictures that look black or half drawn", picProc == nullptr);
     if (picProc != nullptr) m.addItem (5, "Stop taking pictures");
     m.addSeparator();
     {
@@ -417,6 +418,14 @@ void MainComponent::showMainMenu()
             else safe->startPictures (ids, true);
         }
         if (r == 5) safe->stopPictures();
+        if (r == 8)
+        {
+            juce::StringArray ids;
+            for (auto& e : safe->library.plugins())
+                if (! e.hidden && e.format == "VST3" && Thumbs::hasPicture (e) && Thumbs::pictureLooksBad (e)) ids.add (e.id);
+            if (ids.isEmpty()) safe->showToast ("No black or half-drawn pictures found.");
+            else safe->startPictures (ids, true);
+        }
         if (r == 6) Library::dataFolder().startAsProcess();
         if (r == 7) { safe->view = { ViewSel::hidden }; safe->search.clear(); safe->applyView(); }
         if (r >= 20 && r <= 22)

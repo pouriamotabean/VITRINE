@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "WinHelpers.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "Scanner.h"
 
 namespace Thumbs
 {
@@ -31,6 +32,20 @@ namespace Thumbs
 
     bool hasPicture (const PluginEntry& e) { return fileFor (e).existsAsFile(); }
 
+    bool pictureLooksBad (const PluginEntry& e)
+    {
+        const auto img = juce::ImageCache::getFromFile (fileFor (e));
+        if (! img.isValid()) return false;
+        int dark = 0, n = 0;
+        for (int y = 0; y < img.getHeight(); y += 6)
+            for (int x = 0; x < img.getWidth(); x += 6)
+            {
+                if (img.getPixelAt (x, y).getPerceivedBrightness() < 0.05f) ++dark;
+                ++n;
+            }
+        return n > 0 && dark > n * 0.7;    // more than 70 % almost black
+    }
+
     namespace
     {
         // true if the picture is basically one flat colour (black window, blank panel)
@@ -47,6 +62,22 @@ namespace Thumbs
             if (n == 0) return true;
             const double mean = sum / n, var = sum2 / n - mean * mean;
             return var < 0.00002;     // practically one flat colour
+        }
+
+        // how much is drawn: brightness spread plus how many pixels are not near-black
+        double detail (const juce::Image& img)
+        {
+            if (! img.isValid()) return 0.0;
+            double sum = 0, sum2 = 0, lit = 0; int n = 0;
+            for (int y = 0; y < img.getHeight(); y += 5)
+                for (int x = 0; x < img.getWidth(); x += 5)
+                {
+                    const float b = img.getPixelAt (x, y).getPerceivedBrightness();
+                    sum += b; sum2 += b * b; lit += b > 0.06f ? 1.0 : 0.0; ++n;
+                }
+            if (n == 0) return 0.0;
+            const double mean = sum / n;
+            return (sum2 / n - mean * mean) + 0.25 * (lit / n);
         }
 
         struct ShotWindow : juce::DocumentWindow
@@ -69,7 +100,12 @@ namespace Thumbs
     {
         juce::VST3PluginFormat fmt;
         juce::OwnedArray<juce::PluginDescription> types;
-        fmt.findAllTypesForFile (types, path);
+        // fast list first: shells like Waves hold hundreds of plugins and the full scan would be far too slow
+        if (! Scanner::listVst3Fast (path, types))
+        {
+            types.clear();
+            fmt.findAllTypesForFile (types, path);
+        }
         if (types.isEmpty()) return 2;
 
         auto* desc = types.getFirst();
@@ -91,12 +127,16 @@ namespace Thumbs
             w.setVisible (true);
             w.toFront (true);
 
-            // let the plugin draw itself; take a few tries for slow GPU UIs
-            for (int attempt = 0; attempt < 4; ++attempt)
+            // let the plugin draw itself, then keep the most detailed of several captures
+            // (GPU-drawn UIs often show a black or half-drawn window at first)
+            double bestDetail = -1.0;
+            for (int attempt = 0; attempt < 5; ++attempt)
             {
-                juce::MessageManager::getInstance()->runDispatchLoopUntil (attempt == 0 ? 1800 : 900);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (attempt == 0 ? 2500 : 700);
                 auto img = WinHelpers::captureComponentOnScreen (*ed);
-                if (! looksEmpty (img)) { best = img; break; }
+                const double d = detail (img);
+                if (! looksEmpty (img) && d > bestDetail) { best = img; bestDetail = d; }
+                else if (bestDetail > 0 && d <= bestDetail * 1.02 && attempt >= 2) break;   // stopped improving
                 if (juce::SystemStats::getEnvironmentVariable ("VITRINE_SHOT_DEBUG", {}).isNotEmpty())
                     std::fprintf (stderr, "attempt %d: %dx%d valid=%d\n", attempt, img.getWidth(), img.getHeight(), (int) img.isValid());
             }
