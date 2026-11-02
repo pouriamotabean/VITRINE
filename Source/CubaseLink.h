@@ -20,8 +20,8 @@ public:
     juce::String getTrack() const;
     juce::String missingPorts() const;      // human-readable, empty when both exist
 
-    // kind: true = instrument
-    void load (const juce::String& name, const juce::String& vendor, bool instrument);
+    enum class Target { insert, instrumentSlot, newInstrumentTrack };
+    void load (const juce::String& name, const juce::String& vendor, Target target);
     void requestDump();
 
     // replies from Cubase, delivered on the message thread

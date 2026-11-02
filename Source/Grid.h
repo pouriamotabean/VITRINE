@@ -11,7 +11,7 @@ public:
     explicit Grid (Library& lib);
 
     std::function<void (const juce::String&)> onToast;
-    std::function<void (PluginEntry&)> onActivate;      // click on a card (load in Cubase, later)
+    std::function<void (PluginEntry&, bool alternate)> onActivate;   // click on a card (alternate = Ctrl+click)
 
     void setView (const ViewSel& v, const juce::String& search);
     void setCardWidth (int w);

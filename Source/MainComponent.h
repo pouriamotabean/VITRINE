@@ -34,7 +34,7 @@ private:
     void rebuildViewBox();
     void showMoreMenu();
     void showLinkMenu();
-    void loadIntoCubase (PluginEntry& e);
+    void loadIntoCubase (PluginEntry& e, bool alternate);
     juce::String linkText() const;
     juce::Colour linkColour() const;
     bool isCompact() const { return getWidth() < 760; }

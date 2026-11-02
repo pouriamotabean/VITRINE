@@ -2,6 +2,10 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.1
+
+- Instruments: a click makes a **new instrument track** with that instrument (Cubase's own Add Track > Instrument). Ctrl+click swaps the instrument on the selected instrument track instead.
+
 ## Version 0.3.0
 
 - **Cubase link**: select a track in Cubase, click a card, the plugin goes into the first free insert slot. Instruments go into the instrument slot of a selected instrument track. Needs Cubase 15.0.20 or newer and loopMIDI (open it and press + twice).

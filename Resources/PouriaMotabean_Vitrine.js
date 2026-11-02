@@ -4,7 +4,9 @@
 // Vitrine sends SysEx on the loopMIDI port "Vitrine"; this script answers on "Vitrine Back".
 // Message: F0 7D 56 <cmd> <hex-encoded UTF-8 text> F7
 //   'P' ping                         -> 'H' hello (+ API info)
-//   'L' load   text = kind \t name \t vendor     (kind: F = effect, I = instrument)
+//   'L' load   text = kind \t name \t vendor
+//              kind: F = effect into first free insert, I = instrument into the selected
+//              instrument track, N = new instrument track with this instrument
 //   'D' diagnostics                  -> 'D' text dump of the selected channel
 // Replies: 'H' hello, 'T' selected track title, 'O' ok text, 'E' error text, 'D' dump
 
@@ -24,15 +26,21 @@ deviceDriver.makeDetectionUnit().detectPortPair(midiInput, midiOutput)
     .expectOutputNameEquals('loopMIDI Port 1')
 
 var surface = deviceDriver.mSurface
-// one tiny invisible-ish label so the surface is not empty
+// one tiny label so the surface is not empty
 surface.makeLabelField(0, 0, 4, 1)
+
+// a hidden "button" bound to Cubase's own Add Track > Instrument command
+var addInstrumentTrack = surface.makeCustomValueVariable('vitrineAddInstrumentTrack')
 
 var page = deviceDriver.mMapping.makePage('Vitrine')
 var host = page.mHostAccess
 var selected = host.mTrackSelection.mMixerChannel
 var da = host.makeDirectAccess(selected)
 
+page.makeCommandBinding(addInstrumentTrack, 'Add Track', 'Instrument')
+
 var gMapping = null
+var gPending = null          // instrument waiting for its new track
 var gDevice = null
 var gTrackTitle = ''
 
@@ -212,6 +220,34 @@ function dump() {
     send('D', lines.join('\n'))
 }
 
+// New instrument track: run Cubase's Add Track > Instrument, then load the
+// instrument into the new (selected) track when Cubase reports the selection change.
+function newInstrumentTrack(name, vendor) {
+    if (!gDevice) { send('E', 'Cubase link not ready yet.'); return }
+    gPending = { name: name, vendor: vendor, prevTitle: gTrackTitle, at: Date.now() }
+    try {
+        addInstrumentTrack.setProcessValue(gDevice, 1)
+        addInstrumentTrack.setProcessValue(gDevice, 0)
+    } catch (e) {
+        gPending = null
+        send('E', 'Could not add a track: ' + e)
+        return
+    }
+    send('O', 'Adding an instrument track for ' + name + '...')
+}
+
+function tryPending() {
+    if (!gPending) return
+    if (Date.now() - gPending.at > 20000) { gPending = null; return }   // the new track never came
+    if (gTrackTitle === gPending.prevTitle) return
+    var base = da.getBaseObjectID(gMapping)
+    var t = lower(typeOf(base))
+    if (t.indexOf('synth') < 0 && t.indexOf('instrument') < 0) return
+    var p = gPending
+    gPending = null
+    loadPlugin('I', p.name, p.vendor)
+}
+
 // ---------------------------------------------------------------- wiring
 page.mOnActivate = function (activeDevice, activeMapping) {
     gDevice = activeDevice
@@ -225,6 +261,7 @@ selected.mOnTitleChange = function (activeDevice, activeMapping, title) {
     gMapping = activeMapping
     gTrackTitle = '' + title
     send('T', gTrackTitle)
+    tryPending()
 }
 
 midiInput.mOnSysex = function (activeDevice, message) {
@@ -238,7 +275,8 @@ midiInput.mOnSysex = function (activeDevice, message) {
         if (cmd === 'P') send('H', 'api=' + (da.mPluginManager && da.mPluginManager.getNumberOfPluginCollections ? '1.3' : 'old') + '\ttrack=' + gTrackTitle)
         else if (cmd === 'L') {
             var parts = text.split('\t')
-            loadPlugin(parts[0], parts[1] || '', parts[2] || '')
+            if (parts[0] === 'N') newInstrumentTrack(parts[1] || '', parts[2] || '')
+            else loadPlugin(parts[0], parts[1] || '', parts[2] || '')
         }
         else if (cmd === 'D') dump()
     } catch (e) {

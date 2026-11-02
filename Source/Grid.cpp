@@ -313,7 +313,7 @@ void Grid::mouseUp (const juce::MouseEvent& e)
         return;
     }
 
-    if (onActivate) onActivate (*c.entry);
+    if (onActivate) onActivate (*c.entry, e.mods.isCommandDown());
 }
 
 juce::Image Grid::cardImage (const Card& c) const

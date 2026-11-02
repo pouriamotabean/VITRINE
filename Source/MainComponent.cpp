@@ -88,7 +88,7 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     sidebar.onToast = [this] (const juce::String& s) { showToast (s); };
 
     grid.onToast = [this] (const juce::String& s) { showToast (s); };
-    grid.onActivate = [this] (PluginEntry& e) { loadIntoCubase (e); };
+    grid.onActivate = [this] (PluginEntry& e, bool alt) { loadIntoCubase (e, alt); };
 
     link.onStateChange = [this] { repaint(); };
     link.onResult = [this] (bool ok, const juce::String& t) { showToast ((ok ? "" : "Cubase: ") + t, ok ? 2600 : 5200); };
@@ -257,7 +257,7 @@ juce::Colour MainComponent::linkColour() const
     return Theme::faint;
 }
 
-void MainComponent::loadIntoCubase (PluginEntry& e)
+void MainComponent::loadIntoCubase (PluginEntry& e, bool alternate)
 {
     const auto state = link.getState();
     if (state == CubaseLink::State::noPorts)
@@ -271,7 +271,10 @@ void MainComponent::loadIntoCubase (PluginEntry& e)
         return;
     }
     const bool instrument = e.isInstrument || Categories::isInstrumentCategory (e.category());
-    link.load (e.name, e.maker, instrument);
+    // instruments get their own new track; Ctrl+click swaps the instrument on the selected track
+    const auto target = ! instrument ? CubaseLink::Target::insert
+                                     : (alternate ? CubaseLink::Target::instrumentSlot : CubaseLink::Target::newInstrumentTrack);
+    link.load (e.name, e.maker, target);
     library.markUsed (e.id);
     showToast ("Loading " + e.name + "...", 1500);
 }
@@ -312,7 +315,8 @@ void MainComponent::showLinkMenu()
                 "     choose PouriaMotabean / Vitrine, input \"loopMIDI Port\", output \"loopMIDI Port 1\".\n\n"
                 "4.  The status at the top turns green and shows the selected track.\n"
                 "     Select a track in Cubase, click a card: the plugin goes into the first free insert.\n"
-                "     Instruments go into the instrument slot of a selected instrument track.\n\n"
+                "     Instruments get a new instrument track of their own.\n"
+                "     Ctrl+click an instrument to swap it into the selected instrument track instead.\n\n"
                 "Cubase 15.0.20 or newer is needed.");
         }
         if (r == 2) juce::URL ("https://www.tobias-erichsen.de/software/loopmidi.html").launchInDefaultBrowser();

@@ -111,9 +111,10 @@ void CubaseLink::send (char cmd, const juce::String& text)
     out->sendMessageNow (juce::MidiMessage::createSysExMessage (body.getRawDataPointer(), body.size()));
 }
 
-void CubaseLink::load (const juce::String& name, const juce::String& vendor, bool instrument)
+void CubaseLink::load (const juce::String& name, const juce::String& vendor, Target target)
 {
-    send ('L', juce::String (instrument ? "I" : "F") + "\t" + name + "\t" + vendor);
+    const char* k = target == Target::insert ? "F" : (target == Target::instrumentSlot ? "I" : "N");
+    send ('L', juce::String (k) + "\t" + name + "\t" + vendor);
 }
 
 void CubaseLink::requestDump()
