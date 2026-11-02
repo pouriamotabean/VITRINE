@@ -3,7 +3,7 @@
 namespace
 {
     constexpr int maxParallel = 4;
-    constexpr int childTimeoutMs = 30000;
+    constexpr int childTimeoutMs = 180000;   // plugin "shells" (e.g. Waves) hold hundreds of plugins
 
     juce::String makeId (const juce::String& format, const juce::String& path, const juce::String& name)
     {
@@ -384,11 +384,137 @@ void Scanner::run()
 }
 
 //==============================================================================
+//==============================================================================
+// Fast VST3 listing straight from the plugin's factory: reads every class it
+// offers (name, maker, category) without creating any plugin. Needed for
+// "shell" bundles such as Waves, which hold hundreds of plugins in one file.
+#if JUCE_WINDOWS
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #include <windows.h>
+ #include <cstring>
+
+namespace
+{
+    #pragma pack(push, 8)
+    struct PClassInfo2
+    {
+        unsigned char cid[16];
+        juce::int32 cardinality;
+        char category[32];
+        char name[64];
+        juce::uint32 classFlags;
+        char subCategories[128];
+        char vendor[64];
+        char version[64];
+        char sdkVersion[64];
+    };
+    struct PFactoryInfo { char vendor[64]; char url[256]; char email[128]; juce::int32 flags; };
+    #pragma pack(pop)
+
+    struct IFactory2   // COM layout of Steinberg::IPluginFactory2
+    {
+        virtual juce::int32 __stdcall queryInterface (const unsigned char*, void**) = 0;
+        virtual juce::uint32 __stdcall addRef() = 0;
+        virtual juce::uint32 __stdcall release() = 0;
+        virtual juce::int32 __stdcall getFactoryInfo (PFactoryInfo*) = 0;
+        virtual juce::int32 __stdcall countClasses() = 0;
+        virtual juce::int32 __stdcall getClassInfo (juce::int32, void*) = 0;
+        virtual juce::int32 __stdcall createInstance (const char*, const char*, void**) = 0;
+        virtual juce::int32 __stdcall getClassInfo2 (juce::int32, PClassInfo2*) = 0;
+    };
+
+    void makeIid (unsigned char* out, juce::uint32 l1, juce::uint32 l2, juce::uint32 l3, juce::uint32 l4)
+    {
+        const unsigned char b[16] = {
+            (unsigned char) (l1 & 0xff), (unsigned char) ((l1 >> 8) & 0xff), (unsigned char) ((l1 >> 16) & 0xff), (unsigned char) (l1 >> 24),
+            (unsigned char) ((l2 >> 16) & 0xff), (unsigned char) (l2 >> 24), (unsigned char) (l2 & 0xff), (unsigned char) ((l2 >> 8) & 0xff),
+            (unsigned char) (l3 >> 24), (unsigned char) ((l3 >> 16) & 0xff), (unsigned char) ((l3 >> 8) & 0xff), (unsigned char) (l3 & 0xff),
+            (unsigned char) (l4 >> 24), (unsigned char) ((l4 >> 16) & 0xff), (unsigned char) ((l4 >> 8) & 0xff), (unsigned char) (l4 & 0xff) };
+        std::memcpy (out, b, 16);
+    }
+
+    juce::File vst3Binary (const juce::File& bundle)
+    {
+        if (bundle.existsAsFile()) return bundle;    // old single-file VST3
+        auto dir = bundle.getChildFile ("Contents").getChildFile ("x86_64-win");
+        auto f = dir.getChildFile (bundle.getFileName());
+        if (f.existsAsFile()) return f;
+        for (const auto& e : juce::RangedDirectoryIterator (dir, false, "*.vst3", juce::File::findFiles))
+            return e.getFile();
+        return {};
+    }
+
+    bool fastFactoryList (const juce::String& path, juce::OwnedArray<juce::PluginDescription>& found)
+    {
+        const auto bin = vst3Binary (juce::File (path));
+        if (! bin.existsAsFile()) return false;
+
+        HMODULE h = LoadLibraryW (bin.getFullPathName().toWideCharPointer());
+        if (h == nullptr) return false;
+
+        using InitFn = bool (*)();
+        if (auto init = (InitFn) (void*) GetProcAddress (h, "InitDll")) init();
+
+        using GetFactory = IFactory2* (__stdcall *)();
+        auto getFactory = (GetFactory) (void*) GetProcAddress (h, "GetPluginFactory");
+        if (getFactory == nullptr) return false;
+
+        auto* f1 = getFactory();
+        if (f1 == nullptr) return false;
+
+        unsigned char iid2[16];
+        makeIid (iid2, 0x0007B650, 0xF24B4C0B, 0xA464EDB9, 0xF00B2ABB);
+        IFactory2* f2 = nullptr;
+        if (f1->queryInterface (iid2, (void**) &f2) != 0 || f2 == nullptr)
+            return false;
+
+        PFactoryInfo fi {};
+        f2->getFactoryInfo (&fi);
+        const auto factoryVendor = juce::String (fi.vendor);
+
+        const int n = f2->countClasses();
+        for (int i = 0; i < n; ++i)
+        {
+            PClassInfo2 ci {};
+            if (f2->getClassInfo2 (i, &ci) != 0) continue;
+            if (juce::String (ci.category) != "Audio Module Class") continue;
+
+            auto d = std::make_unique<juce::PluginDescription>();
+            d->name = juce::String::fromUTF8 (ci.name);
+            d->descriptiveName = d->name;
+            d->manufacturerName = juce::String::fromUTF8 (ci.vendor).isNotEmpty() ? juce::String::fromUTF8 (ci.vendor) : factoryVendor;
+            d->category = juce::String (ci.subCategories);
+            d->isInstrument = d->category.containsIgnoreCase ("Instrument");
+            d->pluginFormatName = "VST3";
+            d->fileOrIdentifier = path;
+            d->version = juce::String (ci.version);
+            d->uniqueId = (int) juce::String::toHexString (ci.cid, 16, 0).hashCode();
+            d->deprecatedUid = d->uniqueId;
+            if (d->name.isNotEmpty())
+                found.add (d.release());
+        }
+        f2->release();
+        return ! found.isEmpty();
+    }
+}
+#else
+namespace { bool fastFactoryList (const juce::String&, juce::OwnedArray<juce::PluginDescription>&) { return false; } }
+#endif
+
 int Scanner::runChildScan (const juce::String& path, const juce::File& out)
 {
-    juce::VST3PluginFormat fmt;
     juce::OwnedArray<juce::PluginDescription> found;
-    fmt.findAllTypesForFile (found, path);
+
+    // 1) fast: ask the plugin's factory for its list (no plugin is created)
+    if (! fastFactoryList (path, found))
+    {
+        // 2) JUCE's full scan
+        found.clear();
+        juce::VST3PluginFormat fmt;
+        fmt.findAllTypesForFile (found, path);
+    }
 
     juce::XmlElement root ("SCAN");
     for (auto* d : found)

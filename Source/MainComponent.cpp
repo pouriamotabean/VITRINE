@@ -157,6 +157,8 @@ void MainComponent::startScan()
     for (auto& e : library.plugins())
         if (e.format == "VST3")
         {
+            if (e.uid.isEmpty())        // listed only by file name last time (e.g. a Waves shell): read it again
+                continue;
             auto& k = cache[e.path.toLowerCase()];
             k.fileTime = e.fileTime;
             k.ids.add (e.id);
