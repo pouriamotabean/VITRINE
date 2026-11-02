@@ -2,6 +2,10 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.7
+
+- New instrument track: Cubase's Add Track command has different names; Vitrine now tries them one after another (every 2.5 s until a new track appears) and remembers the one that works. The diagnostics show which one it was.
+
 ## Version 0.3.6
 
 - Plugin windows stay open after loading (Cubase's Edit is a toggle; Vitrine no longer switches it back off).

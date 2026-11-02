@@ -30,14 +30,28 @@ var surface = deviceDriver.mSurface
 surface.makeLabelField(0, 0, 4, 1)
 
 // a hidden "button" bound to Cubase's own Add Track > Instrument command
-var addInstrumentTrack = surface.makeCustomValueVariable('vitrineAddInstrumentTrack')
+// Cubase's command names differ between the Key Commands dialog ("Add Track") and its
+// internal names ("AddTrack"); one hidden button per spelling, tried one after another.
+var addTrackCommands = [
+    ['AddTrack', 'Instrument'],
+    ['Add Track', 'Instrument'],
+    ['AddTrack', 'Instrument Track'],
+    ['Project', 'Add Track Instrument']
+]
+var addTrackButtons = []
+for (var ac = 0; ac < addTrackCommands.length; ++ac)
+    addTrackButtons.push(surface.makeCustomValueVariable('vitrineAddInstrumentTrack' + ac))
 
 var page = deviceDriver.mMapping.makePage('Vitrine')
 var host = page.mHostAccess
 var selected = host.mTrackSelection.mMixerChannel
 var da = host.makeDirectAccess(selected)
 
-page.makeCommandBinding(addInstrumentTrack, 'Add Track', 'Instrument')
+for (var bc = 0; bc < addTrackCommands.length; ++bc) {
+    try { page.makeCommandBinding(addTrackButtons[bc], addTrackCommands[bc][0], addTrackCommands[bc][1]) }
+    catch (e) { addTrackButtons[bc] = null }
+}
+var gWorkingAddTrack = -1     // which spelling made Cubase add a track (remembered for this session)
 
 // ---- the selected track's insert slots, seen through Cubase's own insert viewers:
 // their titles tell which slot holds a plugin, their Edit value opens the plugin window.
@@ -345,7 +359,8 @@ function dump() {
         }
     }
     walk(base, 1)
-    lines.push('identityWorks=' + identityWorks + ' viewersWork=' + viewersWork + ' instrument="' + instrumentPlugin + '" pending=' + (gPending ? gPending.name : '-'))
+    lines.push('identityWorks=' + identityWorks + ' viewersWork=' + viewersWork + ' instrument="' + instrumentPlugin + '" pending=' + (gPending ? gPending.name + '#' + gPending.attempt : '-') + ' addTrack=' + gWorkingAddTrack
+               + ' bound=' + addTrackButtons.map(function (b) { return b ? 1 : 0 }).join(''))
     for (var q = 0; q < 8; ++q) lines.push('  slot ' + (q + 1) + ' title="' + slotNames[q] + '" plugin="' + slotPlugin[q] + '"')
     var pm = da.mPluginManager
     if (pm && pm.getNumberOfPluginCollections) {
@@ -365,22 +380,33 @@ function dump() {
 // instrument into the new (selected) track when Cubase reports the selection change.
 function newInstrumentTrack(name, vendor) {
     if (!gDevice) { send('E', 'Cubase link not ready yet.'); return }
-    gPending = { name: name, vendor: vendor, prevBase: da.getBaseObjectID(gMapping), at: Date.now() }
-    try {
-        press(addInstrumentTrack)
-    } catch (e) {
-        gPending = null
-        send('E', 'Could not add a track: ' + e)
-        return
-    }
+    gPending = { name: name, vendor: vendor, prevBase: da.getBaseObjectID(gMapping), at: Date.now(),
+                 attempt: gWorkingAddTrack >= 0 ? gWorkingAddTrack : 0, triedAt: Date.now(), fixed: gWorkingAddTrack >= 0 }
+    fireAddTrack()
     send('O', 'Adding an instrument track for ' + name + '... (if Cubase asks, press Add Track)')
+}
+
+function fireAddTrack() {
+    var p = gPending
+    while (p.attempt < addTrackButtons.length && !addTrackButtons[p.attempt]) p.attempt++
+    if (p.attempt >= addTrackButtons.length) return false
+    press(addTrackButtons[p.attempt])
+    p.triedAt = Date.now()
+    return true
 }
 
 function tryPending() {
     if (!gPending) return
+    // no new track yet: after 2.5 s try the next command spelling (unless a dialog may be open:
+    // once one spelling has worked we stay with it and just wait)
+    var curBase = da.getBaseObjectID(gMapping)
+    if (curBase === gPending.prevBase && !gPending.fixed && Date.now() - gPending.triedAt > 2500) {
+        gPending.attempt++
+        if (!fireAddTrack()) gPending.attempt = 999
+    }
     if (Date.now() - gPending.at > 30000) {
         gPending = null
-        send('E', 'Cubase did not add a track. Add an empty instrument track yourself, select it, and click the instrument again.')
+        send('E', 'Cubase did not add a track (tried ' + addTrackCommands.length + ' ways). Add an empty instrument track, select it, and click the instrument again.')
         return
     }
     var base = da.getBaseObjectID(gMapping)
@@ -389,6 +415,7 @@ function tryPending() {
     if (t.indexOf('synth') < 0 && t.indexOf('instrument') < 0) return
     var p = gPending
     gPending = null
+    if (p.attempt < addTrackButtons.length) gWorkingAddTrack = p.attempt
     loadPlugin('I', p.name, p.vendor)
 }
 
