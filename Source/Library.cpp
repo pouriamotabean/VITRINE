@@ -89,6 +89,9 @@ void Library::load()
             deckList.push_back (d);
         }
 
+    if (root.hasProperty ("sidecarColumns"))
+        sidecarColumns = juce::jlimit (1, 3, (int) root["sidecarColumns"]);
+
     if (root.hasProperty ("cardWidth"))
         cardWidth = juce::jlimit (100, 340, (int) root["cardWidth"]);
 
@@ -131,6 +134,7 @@ void Library::save()
     root->setProperty ("decks", ds);
     root->setProperty ("extraFolders", fs);
     root->setProperty ("cardWidth", cardWidth);
+    root->setProperty ("sidecarColumns", sidecarColumns);
 
     const auto file = dataFolder().getChildFile ("library.json");
     const auto tmp  = file.getSiblingFile ("library.json.tmp");

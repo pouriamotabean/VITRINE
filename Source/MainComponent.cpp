@@ -350,15 +350,20 @@ void MainComponent::showMoreMenu()
     m.addItem (1, "Rescan plugins");
     m.addItem (2, "Add a plugin folder...");
     m.addItem (3, "New deck");
-    juce::PopupMenu sizes;
-    for (auto [label, v] : { std::pair<const char*, int> { "Tiny", 110 }, { "Small", 150 }, { "Medium", 200 }, { "Large", 260 }, { "Huge", 340 } })
-        sizes.addItem (1000 + v, label, true, std::abs (library.cardWidth - v) < 20);
-    m.addSubMenu ("Card size", sizes);
+    juce::PopupMenu cols;
+    for (int n = 1; n <= 3; ++n)
+        cols.addItem (2000 + n, juce::String (n) + (n == 1 ? " column" : " columns"), true, library.sidecarColumns == n);
+    m.addSubMenu ("Columns", cols);
     juce::Component::SafePointer<MainComponent> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&moreButton), [safe] (int r)
     {
         if (safe == nullptr) return;
-        if (r > 1000) safe->sizeSlider.setValue (r - 1000);
+        if (r > 2000)
+        {
+            safe->library.sidecarColumns = r - 2000;
+            safe->library.saveSoon();
+            safe->resized();
+        }
         if (r == 1) safe->startScan();
         if (r == 2) safe->chooseFolder();
         if (r == 3) safe->sidebar.newDeck();
@@ -558,7 +563,7 @@ void MainComponent::resized()
         viewBox.setBounds (12, 54, moreButton.getX() - 6 - 12, 32);
 
         gridView.setBounds (0, compactTopH + 1, w, h - compactTopH - 1);
-        grid.setCardWidth (library.cardWidth);
+        grid.setColumns (library.sidecarColumns);
         grid.layoutFor (gridView.getMaximumVisibleWidth());
         return;
     }
@@ -576,6 +581,7 @@ void MainComponent::resized()
     sidebar.refresh();
 
     gridView.setBounds (sideW + 1, topH + 1, w - sideW - 1, h - topH - 1);
+    grid.setColumns (0);
     grid.setCardWidth (library.cardWidth);
     grid.layoutFor (gridView.getMaximumVisibleWidth());
 }

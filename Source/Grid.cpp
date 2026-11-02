@@ -25,6 +25,15 @@ void Grid::setCardWidth (int w)
     layoutFor (getWidth());
 }
 
+void Grid::setColumns (int n)
+{
+    if (n != fixedCols)
+    {
+        fixedCols = juce::jlimit (0, 4, n);
+        layoutFor (getWidth());
+    }
+}
+
 void Grid::rebuild()
 {
     sections.clear();
@@ -88,11 +97,12 @@ void Grid::layoutFor (int width)
     if (width <= 0)
         return;
 
-    pad = width < 420 ? 12 : 24;
+    pad = width < 420 ? 10 : 24;
+    const int g = width < 420 ? 8 : gap;
     const int avail = width - 2 * pad;
-    const int cols = juce::jmax (1, (avail + gap) / (cardW + gap));
-    const int cw = (avail - (cols - 1) * gap) / cols;
-    const int ch = cw * 10 / 16 + textH;
+    const int cols = fixedCols > 0 ? fixedCols : juce::jmax (1, (avail + g + 0) / (cardW + g));
+    const int cw = (avail - (cols - 1) * g) / cols;
+    const int ch = cw * 10 / 16 + (cw < 150 ? 42 : textH);
 
     int y = 14;
     for (int si = 0; si < (int) sections.size(); ++si)
@@ -107,11 +117,11 @@ void Grid::layoutFor (int width)
         for (int i = 0; i < (int) s.items.size(); ++i)
         {
             const int c = i % cols, r = i / cols;
-            cards.push_back ({ s.items[(size_t) i], { pad + c * (cw + gap), y + r * (ch + gap), cw, ch }, si, i });
+            cards.push_back ({ s.items[(size_t) i], { pad + c * (cw + g), y + r * (ch + g), cw, ch }, si, i });
         }
 
         if (! s.items.empty())
-            y += (((int) s.items.size() + cols - 1) / cols) * (ch + gap);
+            y += (((int) s.items.size() + cols - 1) / cols) * (ch + g);
         y += 10;
     }
 
@@ -160,21 +170,25 @@ void Grid::paintCard (juce::Graphics& g, const Card& c, bool hot) const
     }
 
     // text
-    auto tb = b.withTrimmedTop (thumb.getBottom() - b.getY() + 6.0f).reduced (11.0f, 0.0f).withHeight (textH - 10.0f);
-    auto tag = tb.removeFromRight (40.0f).withSizeKeepingCentre (38.0f, 20.0f);
-    g.setColour (Theme::line);
-    g.fillRoundedRectangle (tag, 4.0f);
-    g.setColour (Theme::dim);
-    g.setFont (Theme::font (10.5f, true));
-    g.drawText (e.format, tag, juce::Justification::centred);
+    const bool tiny = b.getWidth() < 150.0f;
+    auto tb = b.withTrimmedTop (thumb.getBottom() - b.getY() + (tiny ? 3.0f : 6.0f)).reduced (tiny ? 8.0f : 11.0f, 0.0f).withHeight (tiny ? 34.0f : textH - 10.0f);
+    if (! tiny)
+    {
+        auto tag = tb.removeFromRight (40.0f).withSizeKeepingCentre (38.0f, 20.0f);
+        g.setColour (Theme::line);
+        g.fillRoundedRectangle (tag, 4.0f);
+        g.setColour (Theme::dim);
+        g.setFont (Theme::font (10.5f, true));
+        g.drawText (e.format, tag, juce::Justification::centred);
+    }
 
-    const bool small = b.getWidth() < 150.0f;
+    const bool small = tiny;
     g.setColour (Theme::text);
     g.setFont (Theme::font (small ? 13.0f : 15.0f, true));
-    g.drawText (e.name, tb.removeFromTop (20.0f), juce::Justification::centredLeft, true);
+    g.drawText (e.name, tb.removeFromTop (tiny ? 17.0f : 20.0f), juce::Justification::centredLeft, true);
     g.setColour (Theme::dim);
     g.setFont (Theme::font (small ? 11.0f : 12.5f));
-    g.drawText (e.maker.isNotEmpty() ? e.maker : e.category(), tb.removeFromTop (18.0f), juce::Justification::centredLeft, true);
+    g.drawText (e.maker.isNotEmpty() ? e.maker : e.category(), tb.removeFromTop (tiny ? 15.0f : 18.0f), juce::Justification::centredLeft, true);
 
     if (hot)
     {

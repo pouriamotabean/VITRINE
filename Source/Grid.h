@@ -15,6 +15,7 @@ public:
 
     void setView (const ViewSel& v, const juce::String& search);
     void setCardWidth (int w);
+    void setColumns (int n);          // > 0: fixed number of columns (Sidecar), 0: from card width
     void setStatusText (const juce::String& s) { status = s; repaint(); }
     void rebuild();                                       // library changed
     void layoutFor (int width);
@@ -45,6 +46,7 @@ private:
     ViewSel view;
     juce::String searchText, status;
     int cardW = 210;
+    int fixedCols = 0;
     int pad = 24;                  // side margin; smaller in narrow windows
     std::vector<Section> sections;
     std::vector<Card> cards;

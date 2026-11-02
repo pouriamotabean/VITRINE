@@ -45,6 +45,8 @@ var MAX_SLOTS = 16
 var slotNames = []          // plugin name per slot ('' = empty), from Cubase
 var slotEdit = []           // hidden values bound to each slot's Edit (open window)
 var viewersWork = false     // true once Cubase has reported any slot name
+var slotPlugin = []         // plugin name per slot from Cubase's plugin-identity reports ('' = empty)
+var identityWorks = false   // true once Cubase sends plugin identities
 var gPendingOpen = -1       // slot whose window should open once the plugin is in
 
 try {
@@ -52,8 +54,19 @@ try {
     for (var si = 0; si < MAX_SLOTS; ++si) {
         (function (i) {
             slotNames[i] = ''
+            slotPlugin[i] = ''
             var viewer = insertsHost.makeInsertEffectViewer('vitrineSlot' + i)
             var slot = viewer.accessSlotAtIndex(i)
+            var onIdentity = function (activeDevice, activeMapping, pluginName) {
+                gDevice = activeDevice
+                gMapping = activeMapping
+                slotPlugin[i] = '' + (pluginName || '')
+                identityWorks = true
+                if (slotPlugin[i] === '' && gFilled[gTrackTitle] && gFilled[gTrackTitle][i] && Date.now() - gFilled[gTrackTitle][i] > 3000)
+                    delete gFilled[gTrackTitle][i]
+                if (gPendingOpen === i && slotPlugin[i] !== '') openSlotWindow(i)
+            }
+            try { slot.mOnChangePluginIdentity = onIdentity } catch (e) {}
             slot.mOnTitleChange = function (activeDevice, activeMapping, title) {
                 gDevice = activeDevice
                 gMapping = activeMapping
@@ -132,9 +145,15 @@ function child(id, i) {
     try { return da.getChildObjectID(gMapping, id, i) } catch (e) { return -1 }
 }
 
+var gHeld = []
 function press(v) {
     if (!v || !gDevice) return
-    try { v.setProcessValue(gDevice, 0); v.setProcessValue(gDevice, 1) } catch (e) {}
+    try { v.setProcessValue(gDevice, 1) } catch (e) {}
+    gHeld.push(v)
+}
+function releaseHeld() {
+    for (var k = 0; k < gHeld.length; ++k) { try { gHeld[k].setProcessValue(gDevice, 0) } catch (e) {} }
+    gHeld = []
 }
 
 function openSlotWindow(i) {
@@ -239,12 +258,10 @@ function loadPlugin(kind, name, vendor) {
         for (var i = 0; i < n; ++i) {
             var s = child(inserts, i)
             var slotName = i < slotNames.length ? slotNames[i] : ''
-            seen.push('"' + slotName + '"/' + childCount(s))
+            seen.push('"' + slotName + '"/' + (slotPlugin[i] || '-'))
             var empty
-            var recent = filled[i] && (Date.now() - filled[i] < 4000)   // just loaded, Cubase may not have reported yet
-            if (recent) empty = false
-            else if (viewersWork) empty = slotTitleIsEmpty(slotName)      // Cubase tells us the names
-            else empty = isEmptySlot(s)
+            if (identityWorks) empty = (slotPlugin[i] === '') && !(filled[i] && Date.now() - filled[i] < 3000)
+            else empty = !filled[i] && slotTitleIsEmpty(slotName) && isEmptySlot(s)
             if (empty) { slotID = s; slotIndex = i; where = 'insert ' + (i + 1); break }
         }
         if (slotID < 0) {
@@ -291,6 +308,8 @@ function dump() {
         }
     }
     walk(base, 1)
+    lines.push('identityWorks=' + identityWorks + ' viewersWork=' + viewersWork)
+    for (var q = 0; q < 8; ++q) lines.push('  slot ' + (q + 1) + ' title="' + slotNames[q] + '" plugin="' + slotPlugin[q] + '"')
     var pm = da.mPluginManager
     if (pm && pm.getNumberOfPluginCollections) {
         var ins = findChild(base, ['insert'], 3)
@@ -311,14 +330,13 @@ function newInstrumentTrack(name, vendor) {
     if (!gDevice) { send('E', 'Cubase link not ready yet.'); return }
     gPending = { name: name, vendor: vendor, prevBase: da.getBaseObjectID(gMapping), at: Date.now() }
     try {
-        addInstrumentTrack.setProcessValue(gDevice, 1)
-        addInstrumentTrack.setProcessValue(gDevice, 0)
+        press(addInstrumentTrack)
     } catch (e) {
         gPending = null
         send('E', 'Could not add a track: ' + e)
         return
     }
-    send('O', 'Adding an instrument track for ' + name + '...')
+    send('O', 'Adding an instrument track for ' + name + '... (if Cubase asks, press Add Track)')
 }
 
 function tryPending() {
@@ -358,6 +376,7 @@ midiInput.mOnSysex = function (activeDevice, message) {
 
     try {
         if (cmd === 'P') {
+            releaseHeld()
             tryPending()
             if (gPendingOpen >= 0 && Date.now() - gPendingOpenAt > 900) openSlotWindow(gPendingOpen)
             if (gOpenInstrumentAt && Date.now() > gOpenInstrumentAt) { gOpenInstrumentAt = 0; press(instrumentEdit) }

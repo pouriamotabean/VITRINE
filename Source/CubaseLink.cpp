@@ -22,7 +22,7 @@ namespace
 CubaseLink::CubaseLink()
 {
     openPorts();
-    startTimer (2000);
+    startTimer (500);
 }
 
 CubaseLink::~CubaseLink()

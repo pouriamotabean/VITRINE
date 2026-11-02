@@ -68,7 +68,8 @@ public:
 
     juce::StringArray allMakers() const;
     juce::StringArray extraFolders;      // extra VST3 search folders chosen by the user
-    int cardWidth = 210;                 // card size, kept in Full and Sidecar
+    int cardWidth = 210;                 // card size in the big window
+    int sidecarColumns = 2;              // columns in the narrow window
 
     // demo data for screenshots / first look without a scan
     void fillDemo();

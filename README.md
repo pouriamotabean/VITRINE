@@ -2,6 +2,12 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.5
+
+- Insert slots: Vitrine now listens to Cubase's plugin-identity reports for each slot (slot titles are only numbers), and also remembers the slots it filled itself, so each new effect goes into the next free slot.
+- New instrument track: the Add Track command is now really triggered (Cubase reacts only to a held button press).
+- Sidecar shows 2 columns by default; "..." > Columns to choose 1, 2 or 3. Small cards drop the format tag.
+
 ## Version 0.3.4
 
 - Fixed: Cubase names empty insert slots by their number ("1", "2"...); those now count as empty, so effects go into the first free slot again, then the next one.
