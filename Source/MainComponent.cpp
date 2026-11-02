@@ -68,7 +68,7 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
 
     sizeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     sizeSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    sizeSlider.setRange (150, 340, 1);
+    sizeSlider.setRange (100, 340, 1);
     sizeSlider.setValue (library.cardWidth, juce::dontSendNotification);
     sizeSlider.setTooltip ("Card size");
     sizeSlider.onValueChange = [this]
@@ -354,14 +354,14 @@ void MainComponent::showMoreMenu()
     m.addItem (2, "Add a plugin folder...");
     m.addItem (3, "New deck");
     juce::PopupMenu sizes;
-    for (auto [label, v] : { std::pair<const char*, int> { "Small", 150 }, { "Medium", 200 }, { "Large", 260 }, { "Huge", 340 } })
-        sizes.addItem (10 + v, label, true, std::abs (library.cardWidth - v) < 25);
+    for (auto [label, v] : { std::pair<const char*, int> { "Tiny", 110 }, { "Small", 150 }, { "Medium", 200 }, { "Large", 260 }, { "Huge", 340 } })
+        sizes.addItem (1000 + v, label, true, std::abs (library.cardWidth - v) < 20);
     m.addSubMenu ("Card size", sizes);
     juce::Component::SafePointer<MainComponent> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&moreButton), [safe] (int r)
     {
         if (safe == nullptr) return;
-        if (r > 100) safe->sizeSlider.setValue (r - 10);
+        if (r > 1000) safe->sizeSlider.setValue (r - 1000);
         if (r == 1) safe->startScan();
         if (r == 2) safe->chooseFolder();
         if (r == 3) safe->sidebar.newDeck();

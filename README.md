@@ -2,6 +2,13 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.3
+
+- Effects go into the first EMPTY insert slot, and the next one into the next empty slot (Cubase's own insert viewers report which slots are taken).
+- The plugin window opens after loading, like Cubase's auto-open.
+- New instrument track: the instrument now waits until the new track really exists before loading (it used to land on the old track).
+- Cards can be much smaller (Tiny size).
+
 ## Version 0.3.2
 
 - Sidecar is 300 px wide (like Cubase's right zone) and sits on the right edge of Cubase's window.

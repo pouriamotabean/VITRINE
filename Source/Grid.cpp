@@ -21,7 +21,7 @@ void Grid::setView (const ViewSel& v, const juce::String& search)
 
 void Grid::setCardWidth (int w)
 {
-    cardW = juce::jlimit (140, 360, w);
+    cardW = juce::jlimit (100, 360, w);
     layoutFor (getWidth());
 }
 
@@ -168,11 +168,12 @@ void Grid::paintCard (juce::Graphics& g, const Card& c, bool hot) const
     g.setFont (Theme::font (10.5f, true));
     g.drawText (e.format, tag, juce::Justification::centred);
 
+    const bool small = b.getWidth() < 150.0f;
     g.setColour (Theme::text);
-    g.setFont (Theme::font (15.0f, true));
+    g.setFont (Theme::font (small ? 13.0f : 15.0f, true));
     g.drawText (e.name, tb.removeFromTop (20.0f), juce::Justification::centredLeft, true);
     g.setColour (Theme::dim);
-    g.setFont (Theme::font (12.5f));
+    g.setFont (Theme::font (small ? 11.0f : 12.5f));
     g.drawText (e.maker.isNotEmpty() ? e.maker : e.category(), tb.removeFromTop (18.0f), juce::Justification::centredLeft, true);
 
     if (hot)

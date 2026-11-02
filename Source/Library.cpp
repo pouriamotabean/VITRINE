@@ -90,7 +90,7 @@ void Library::load()
         }
 
     if (root.hasProperty ("cardWidth"))
-        cardWidth = juce::jlimit (150, 340, (int) root["cardWidth"]);
+        cardWidth = juce::jlimit (100, 340, (int) root["cardWidth"]);
 
     if (auto* arr = root["extraFolders"].getArray())
         for (auto& v : *arr)

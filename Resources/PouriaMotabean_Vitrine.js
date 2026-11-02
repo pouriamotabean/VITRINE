@@ -39,6 +39,46 @@ var da = host.makeDirectAccess(selected)
 
 page.makeCommandBinding(addInstrumentTrack, 'Add Track', 'Instrument')
 
+// ---- the selected track's insert slots, seen through Cubase's own insert viewers:
+// their titles tell which slot holds a plugin, their Edit value opens the plugin window.
+var MAX_SLOTS = 16
+var slotNames = []          // plugin name per slot ('' = empty), from Cubase
+var slotEdit = []           // hidden values bound to each slot's Edit (open window)
+var viewersWork = false     // true once Cubase has reported any slot name
+var gPendingOpen = -1       // slot whose window should open once the plugin is in
+
+try {
+    var insertsHost = selected.mInsertAndStripEffects
+    for (var si = 0; si < MAX_SLOTS; ++si) {
+        (function (i) {
+            slotNames[i] = ''
+            var viewer = insertsHost.makeInsertEffectViewer('vitrineSlot' + i)
+            var slot = viewer.accessSlotAtIndex(i)
+            slot.mOnTitleChange = function (activeDevice, activeMapping, title) {
+                gDevice = activeDevice
+                gMapping = activeMapping
+                slotNames[i] = '' + (title || '')
+                if (slotNames[i] !== '') viewersWork = true
+                if (gPendingOpen === i && slotNames[i] !== '') openSlotWindow(i)
+            }
+            var ev = surface.makeCustomValueVariable('vitrineEdit' + i)
+            page.makeValueBinding(ev, slot.mEdit)
+            slotEdit[i] = ev
+        })(si)
+    }
+} catch (e) { /* older API: fall back to DirectAccess only */ }
+
+// instrument window
+var instrumentEdit = null
+try {
+    instrumentEdit = surface.makeCustomValueVariable('vitrineInstrumentEdit')
+    page.makeValueBinding(instrumentEdit, selected.mInstrumentPluginSlot.mEdit)
+} catch (e) { instrumentEdit = null }
+
+var gFilled = {}
+var gPendingOpenAt = 0
+var gOpenInstrumentAt = 0            // per track: slots this script filled, in case Cubase does not report names
+
 var gMapping = null
 var gPending = null          // instrument waiting for its new track
 var gDevice = null
@@ -92,6 +132,16 @@ function child(id, i) {
     try { return da.getChildObjectID(gMapping, id, i) } catch (e) { return -1 }
 }
 
+function press(v) {
+    if (!v || !gDevice) return
+    try { v.setProcessValue(gDevice, 0); v.setProcessValue(gDevice, 1) } catch (e) {}
+}
+
+function openSlotWindow(i) {
+    gPendingOpen = -1
+    press(slotEdit[i])
+}
+
 // first child whose type name contains one of the words, else the fallback index
 function findChild(parent, words, fallbackIndex) {
     var n = childCount(parent)
@@ -125,6 +175,7 @@ function findPluginUID(slotID, name, vendor) {
     for (var c = 0; c < count; ++c) if (c !== def && c !== act) order.push(c)
 
     var n = lower(name), v = lower(vendor)
+    if (n === '') return { error: 'No plugin name was sent.' }
     var loose = null
     for (var k = 0; k < order.length; ++k) {
         var col = pm.getPluginCollectionByIndex(gMapping, slotID, order[k])
@@ -161,6 +212,7 @@ function loadPlugin(kind, name, vendor) {
 
     var baseType = lower(typeOf(base))
     var slotID = -1
+    var slotIndex = -1
     var where = ''
 
     if (kind === 'I') {
@@ -176,10 +228,15 @@ function loadPlugin(kind, name, vendor) {
         if (inserts < 0) { send('E', 'Could not find the insert slots of ' + gTrackTitle + '.'); return }
         var n = childCount(inserts)
         var seen = []
+        var filled = gFilled[gTrackTitle] || {}
         for (var i = 0; i < n; ++i) {
             var s = child(inserts, i)
-            seen.push(typeOf(s) + ':"' + titleOf(s) + '"')
-            if (isEmptySlot(s)) { slotID = s; where = 'insert ' + (i + 1); break }
+            var slotName = i < slotNames.length ? slotNames[i] : ''
+            seen.push('"' + slotName + '"/' + childCount(s))
+            var empty
+            if (viewersWork) empty = (slotName === '')                   // Cubase tells us the names
+            else empty = !filled[i] && childCount(s) === 0 && isEmptySlot(s)
+            if (empty) { slotID = s; slotIndex = i; where = 'insert ' + (i + 1); break }
         }
         if (slotID < 0) {
             send('E', 'No free insert found on ' + gTrackTitle + '. Cubase shows ' + n + ' items under "' + typeOf(inserts) + '": '
@@ -196,8 +253,18 @@ function loadPlugin(kind, name, vendor) {
     var ok = false
     try { ok = da.mPluginManager.trySetSlotPlugin(gMapping, slotID, found.uid, false) } catch (e) { send('E', 'Cubase refused: ' + e); return }
 
-    if (ok === false) send('E', 'Cubase could not load ' + found.name + '.')
-    else send('O', found.name + ' -> ' + gTrackTitle + ', ' + where)
+    if (ok === false) { send('E', 'Cubase could not load ' + found.name + '.'); return }
+    send('O', found.name + ' -> ' + gTrackTitle + ', ' + where)
+
+    if (kind === 'I') {
+        if (instrumentEdit) gOpenInstrumentAt = Date.now() + 600
+    } else if (slotIndex >= 0) {
+        if (!gFilled[gTrackTitle]) gFilled[gTrackTitle] = {}
+        gFilled[gTrackTitle][slotIndex] = true
+        slotNames[slotIndex] = slotNames[slotIndex] || found.name
+        gPendingOpen = slotIndex
+        gPendingOpenAt = Date.now()
+    }
 }
 
 function dump() {
@@ -233,7 +300,7 @@ function dump() {
 // instrument into the new (selected) track when Cubase reports the selection change.
 function newInstrumentTrack(name, vendor) {
     if (!gDevice) { send('E', 'Cubase link not ready yet.'); return }
-    gPending = { name: name, vendor: vendor, prevTitle: gTrackTitle, at: Date.now() }
+    gPending = { name: name, vendor: vendor, prevBase: da.getBaseObjectID(gMapping), at: Date.now() }
     try {
         addInstrumentTrack.setProcessValue(gDevice, 1)
         addInstrumentTrack.setProcessValue(gDevice, 0)
@@ -247,9 +314,9 @@ function newInstrumentTrack(name, vendor) {
 
 function tryPending() {
     if (!gPending) return
-    if (Date.now() - gPending.at > 20000) { gPending = null; return }   // the new track never came
-    if (gTrackTitle === gPending.prevTitle) return
+    if (Date.now() - gPending.at > 30000) { gPending = null; send('E', 'No new instrument track appeared.'); return }
     var base = da.getBaseObjectID(gMapping)
+    if (base === gPending.prevBase) return             // still the old track
     var t = lower(typeOf(base))
     if (t.indexOf('synth') < 0 && t.indexOf('instrument') < 0) return
     var p = gPending
@@ -281,6 +348,11 @@ midiInput.mOnSysex = function (activeDevice, message) {
     var text = fromHex(message, 4, len - 1)
 
     try {
+        if (cmd === 'P') {
+            tryPending()
+            if (gPendingOpen >= 0 && Date.now() - gPendingOpenAt > 900) openSlotWindow(gPendingOpen)
+            if (gOpenInstrumentAt && Date.now() > gOpenInstrumentAt) { gOpenInstrumentAt = 0; press(instrumentEdit) }
+        }
         if (cmd === 'P') send('H', 'api=' + (da.mPluginManager && da.mPluginManager.getNumberOfPluginCollections ? '1.3' : 'old') + '\ttrack=' + gTrackTitle)
         else if (cmd === 'L') {
             var parts = text.split('\t')
