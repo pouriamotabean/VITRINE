@@ -2,6 +2,12 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.0
+
+- **Cubase link**: select a track in Cubase, click a card, the plugin goes into the first free insert slot. Instruments go into the instrument slot of a selected instrument track. Needs Cubase 15.0.20 or newer and loopMIDI (open it and press + twice).
+- Vitrine puts its MIDI Remote script into Cubase's script folder by itself. The status at the top shows the connection and the selected track; click it for help and diagnostics.
+- App icon. Full / Sidecar switch. Card size is kept in Sidecar too (and remembered).
+
 ## Version 0.2.0
 
 - **Sidecar** button: a narrow window on the right edge of the screen, always on top of Cubase. **Wide** brings the big window back. Any narrow window switches to this compact layout by itself.

@@ -5,6 +5,7 @@
 #include "Sidebar.h"
 #include "Grid.h"
 #include "Theme.h"
+#include "CubaseLink.h"
 
 class MainComponent : public juce::Component,
                       public juce::DragAndDropContainer,
@@ -19,6 +20,7 @@ public:
     void paintOverChildren (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
+    void mouseUp (const juce::MouseEvent&) override;
 
     void showToast (const juce::String& s, int ms = 3200);
     void startScan();
@@ -31,10 +33,16 @@ private:
     void toggleSidecar();
     void rebuildViewBox();
     void showMoreMenu();
+    void showLinkMenu();
+    void loadIntoCubase (PluginEntry& e);
+    juce::String linkText() const;
+    juce::Colour linkColour() const;
     bool isCompact() const { return getWidth() < 760; }
 
     Library& library;
     Scanner scanner;
+    CubaseLink link;
+    juce::Rectangle<int> pillBounds;
 
     Sidebar sidebar;
     juce::Viewport sideView;
@@ -43,7 +51,7 @@ private:
 
     juce::TextEditor search;
     juce::TextButton rescanButton { "Rescan" }, foldersButton { "Folders" };
-    juce::TextButton sidecarButton { "Sidecar" }, moreButton { "..." };
+    juce::TextButton fullButton { "Full" }, sidecarButton { "Sidecar" }, moreButton { "..." };
     juce::ComboBox viewBox;
     std::vector<ViewSel> viewChoices;
     bool sidecar = false;
@@ -54,6 +62,5 @@ private:
     juce::String toastText;
     juce::uint32 toastUntil = 0;
     juce::String scanText;
-    bool shownLoadHint = false;
     std::unique_ptr<juce::FileChooser> chooser;
 };

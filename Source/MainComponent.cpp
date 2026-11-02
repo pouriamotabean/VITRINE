@@ -4,7 +4,7 @@
 
 namespace
 {
-    constexpr int topH = 64, compactTopH = 108, sideW = 236, pillW = 196, pillRightGap = 392;
+    constexpr int topH = 64, compactTopH = 114, sideW = 236, pillW = 210, pillRightGap = 436;
 }
 
 MainComponent::MainComponent (Library& lib, bool scanNow)
@@ -39,9 +39,13 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     foldersButton.onClick = [this] { chooseFolder(); };
     addAndMakeVisible (foldersButton);
 
+    fullButton.setTooltip ("Big window");
+    fullButton.onClick = [this] { if (sidecar) toggleSidecar(); };
+    fullButton.setToggleState (true, juce::dontSendNotification);
+    addAndMakeVisible (fullButton);
+
     sidecarButton.setTooltip ("Narrow window on the right edge of the screen, always on top of Cubase");
-    sidecarButton.setClickingTogglesState (false);
-    sidecarButton.onClick = [this] { toggleSidecar(); };
+    sidecarButton.onClick = [this] { if (! sidecar) toggleSidecar(); };
     addAndMakeVisible (sidecarButton);
 
     moreButton.setTooltip ("Rescan, folders, wide window");
@@ -64,9 +68,14 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     sizeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     sizeSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     sizeSlider.setRange (150, 340, 1);
-    sizeSlider.setValue (210, juce::dontSendNotification);
+    sizeSlider.setValue (library.cardWidth, juce::dontSendNotification);
     sizeSlider.setTooltip ("Card size");
-    sizeSlider.onValueChange = [this] { if (! isCompact()) grid.setCardWidth ((int) sizeSlider.getValue()); };
+    sizeSlider.onValueChange = [this]
+    {
+        library.cardWidth = (int) sizeSlider.getValue();
+        library.saveSoon();
+        grid.setCardWidth (library.cardWidth);
+    };
     addAndMakeVisible (sizeSlider);
 
     sidebar.onSelect = [this] (const ViewSel& v)
@@ -79,12 +88,24 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     sidebar.onToast = [this] (const juce::String& s) { showToast (s); };
 
     grid.onToast = [this] (const juce::String& s) { showToast (s); };
-    grid.onActivate = [this] (PluginEntry& e)
+    grid.onActivate = [this] (PluginEntry& e) { loadIntoCubase (e); };
+
+    link.onStateChange = [this] { repaint(); };
+    link.onResult = [this] (bool ok, const juce::String& t) { showToast ((ok ? "" : "Cubase: ") + t, ok ? 2600 : 5200); };
+    link.onDump = [this] (const juce::String& t)
     {
-        showToast (shownLoadHint ? e.name
-                                 : e.name + "  -  loading into Cubase comes with the Cubase link (next version)", 3600);
-        shownLoadHint = true;
+        const auto f = Library::dataFolder().getChildFile ("cubase-diagnostics.txt");
+        f.replaceWithText (t);
+        juce::SystemClipboard::copyTextToClipboard (t);
+        showToast ("Cubase diagnostics copied to the clipboard (also saved in cubase-diagnostics.txt).", 5000);
     };
+
+    if (! CubaseLink::scriptIsCurrent())
+    {
+        juce::String err;
+        if (! CubaseLink::installScript (err))
+            showToast ("Could not install the Cubase script: " + err, 6000);
+    }
 
     setWantsKeyboardFocus (true);
     rebuildViewBox();
@@ -207,7 +228,109 @@ void MainComponent::toggleSidecar()
 
     sidecar = ! sidecar;
     sidecarButton.setToggleState (sidecar, juce::dontSendNotification);
-    sidecarButton.setButtonText (sidecar ? "Wide" : "Sidecar");
+    fullButton.setToggleState (! sidecar, juce::dontSendNotification);
+}
+
+juce::String MainComponent::linkText() const
+{
+    switch (link.getState())
+    {
+        case CubaseLink::State::noPorts:   return "Cubase: loopMIDI ports missing";
+        case CubaseLink::State::waiting:   return "Cubase: waiting...";
+        case CubaseLink::State::connected:
+        {
+            const auto t = link.getTrack();
+            return t.isNotEmpty() ? "Cubase - " + t : "Cubase connected";
+        }
+    }
+    return {};
+}
+
+juce::Colour MainComponent::linkColour() const
+{
+    switch (link.getState())
+    {
+        case CubaseLink::State::noPorts:   return juce::Colour (0xffe0503a);
+        case CubaseLink::State::waiting:   return Theme::faint;
+        case CubaseLink::State::connected: return Theme::ok;
+    }
+    return Theme::faint;
+}
+
+void MainComponent::loadIntoCubase (PluginEntry& e)
+{
+    const auto state = link.getState();
+    if (state == CubaseLink::State::noPorts)
+    {
+        showToast ("loopMIDI ports not found: open loopMIDI and press + twice (or click the Cubase status for help).", 5600);
+        return;
+    }
+    if (state == CubaseLink::State::waiting)
+    {
+        showToast ("Cubase is not answering. Is Cubase open with a project? Click the Cubase status for help.", 5200);
+        return;
+    }
+    const bool instrument = e.isInstrument || Categories::isInstrumentCategory (e.category());
+    link.load (e.name, e.maker, instrument);
+    library.markUsed (e.id);
+    showToast ("Loading " + e.name + "...", 1500);
+}
+
+void MainComponent::showLinkMenu()
+{
+    juce::PopupMenu m;
+    const auto state = link.getState();
+
+    if (state == CubaseLink::State::noPorts)
+        m.addSectionHeader ("loopMIDI ports not found (" + link.missingPorts() + " port missing)");
+    else if (state == CubaseLink::State::waiting)
+        m.addSectionHeader ("Ports OK. Waiting for the script in Cubase.");
+    else
+        m.addSectionHeader ("Connected to Cubase");
+
+    m.addItem (1, "How to connect (step by step)");
+    m.addItem (2, "Get loopMIDI (free)");
+    m.addItem (3, CubaseLink::scriptIsCurrent() ? "Re-install the Cubase script" : "Install the Cubase script");
+    m.addItem (4, "Show the script folder");
+    m.addSeparator();
+    m.addItem (5, "Copy diagnostics for Claude", state == CubaseLink::State::connected);
+
+    juce::Component::SafePointer<MainComponent> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (pillBounds)), [safe] (int r)
+    {
+        if (safe == nullptr || r == 0) return;
+        if (r == 1)
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Connect Vitrine to Cubase",
+                "1.  Install loopMIDI, open it and press the + button TWICE.\n"
+                "     You get \"loopMIDI Port\" and \"loopMIDI Port 1\". The names do not matter,\n"
+                "     Vitrine uses these two. (Ports named \"Vitrine\" and \"Vitrine Back\" work too.)\n"
+                "     Tip: in loopMIDI's tray menu, tick \"Autostart loopMIDI\".\n\n"
+                "2.  Vitrine has put its script in Cubase's MIDI Remote folder.\n"
+                "     Restart Cubase, or in Cubase: Studio > MIDI Remote Manager > Scripts > Reload Scripts.\n\n"
+                "3.  Cubase finds the \"Vitrine\" remote by itself. If not: MIDI Remote tab (lower zone) > +,\n"
+                "     choose PouriaMotabean / Vitrine, input \"loopMIDI Port\", output \"loopMIDI Port 1\".\n\n"
+                "4.  The status at the top turns green and shows the selected track.\n"
+                "     Select a track in Cubase, click a card: the plugin goes into the first free insert.\n"
+                "     Instruments go into the instrument slot of a selected instrument track.\n\n"
+                "Cubase 15.0.20 or newer is needed.");
+        }
+        if (r == 2) juce::URL ("https://www.tobias-erichsen.de/software/loopmidi.html").launchInDefaultBrowser();
+        if (r == 3)
+        {
+            juce::String err;
+            if (CubaseLink::installScript (err)) safe->showToast ("Script installed. In Cubase: MIDI Remote Manager > Scripts > Reload Scripts.", 5200);
+            else safe->showToast ("Could not install: " + err, 6000);
+        }
+        if (r == 4) CubaseLink::scriptFolder().getChildFile ("PouriaMotabean_Vitrine.js").revealToUser();
+        if (r == 5) safe->link.requestDump();
+    });
+}
+
+void MainComponent::mouseUp (const juce::MouseEvent& e)
+{
+    if (pillBounds.contains (e.getPosition()))
+        showLinkMenu();
 }
 
 void MainComponent::showMoreMenu()
@@ -216,10 +339,15 @@ void MainComponent::showMoreMenu()
     m.addItem (1, "Rescan plugins");
     m.addItem (2, "Add a plugin folder...");
     m.addItem (3, "New deck");
+    juce::PopupMenu sizes;
+    for (auto [label, v] : { std::pair<const char*, int> { "Small", 150 }, { "Medium", 200 }, { "Large", 260 }, { "Huge", 340 } })
+        sizes.addItem (10 + v, label, true, std::abs (library.cardWidth - v) < 25);
+    m.addSubMenu ("Card size", sizes);
     juce::Component::SafePointer<MainComponent> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&moreButton), [safe] (int r)
     {
         if (safe == nullptr) return;
+        if (r > 100) safe->sizeSlider.setValue (r - 10);
         if (r == 1) safe->startScan();
         if (r == 2) safe->chooseFolder();
         if (r == 3) safe->sidebar.newDeck();
@@ -309,11 +437,20 @@ void MainComponent::paint (juce::Graphics& g)
     {
         g.setColour (Theme::line);
         g.drawHorizontalLine (compactTopH, 0.0f, (float) getWidth());
+        g.setFont (Theme::font (11.0f));
         if (scanText.isNotEmpty())
         {
             g.setColour (Theme::accent.withAlpha (0.9f));
-            g.setFont (Theme::font (11.0f));
             g.drawText (scanText, 16, compactTopH - 12, getWidth() - 32, 12, juce::Justification::centredLeft, true);
+            pillBounds = {};
+        }
+        else
+        {
+            pillBounds = { 16, compactTopH - 13, getWidth() - 32, 13 };
+            g.setColour (linkColour());
+            g.fillEllipse (16.0f, (float) compactTopH - 9.0f, 6.0f, 6.0f);
+            g.setColour (Theme::dim);
+            g.drawText (linkText(), 28, compactTopH - 13, getWidth() - 44, 12, juce::Justification::centredLeft, true);
         }
         return;
     }
@@ -324,17 +461,18 @@ void MainComponent::paint (juce::Graphics& g)
     g.drawText ("VITRINE", 26, 0, sideW - 26, topH, juce::Justification::centredLeft);
 
 
-    // Cubase link pill (session 2)
+    // Cubase link status (click for help)
     auto pill = juce::Rectangle<float> ((float) (getWidth() - pillRightGap - pillW), 16.0f, (float) pillW, 32.0f);
+    pillBounds = pill.toNearestInt();
     g.setColour (Theme::panel);
     g.fillRoundedRectangle (pill, 16.0f);
     g.setColour (Theme::line);
     g.drawRoundedRectangle (pill.reduced (0.5f), 16.0f, 1.0f);
-    g.setColour (Theme::faint);
+    g.setColour (linkColour());
     g.fillEllipse (pill.getX() + 14.0f, pill.getCentreY() - 4.0f, 8.0f, 8.0f);
-    g.setColour (Theme::dim);
+    g.setColour (link.getState() == CubaseLink::State::connected ? Theme::text : Theme::dim);
     g.setFont (Theme::font (13.0f));
-    g.drawText ("Cubase link: next version", pill.withTrimmedLeft (30.0f), juce::Justification::centredLeft);
+    g.drawText (linkText(), pill.withTrimmedLeft (30.0f).withTrimmedRight (10.0f), juce::Justification::centredLeft, true);
 
     // size slider caption
     g.setColour (Theme::faint);
@@ -398,13 +536,14 @@ void MainComponent::resized()
     if (compact)
     {
         // narrow: search + buttons on one row, a view picker below, no sidebar
-        sidecarButton.setBounds (w - 16 - 72, 14, 72, 34);
-        moreButton.setBounds (w - 16 - 72 - 8 - 40, 14, 40, 34);
+        sidecarButton.setBounds (w - 16 - 70, 14, 70, 34);
+        fullButton.setBounds (sidecarButton.getX() - 4 - 48, 14, 48, 34);
+        moreButton.setBounds (fullButton.getX() - 8 - 38, 14, 38, 34);
         search.setBounds (16, 13, moreButton.getX() - 8 - 16, 36);
-        viewBox.setBounds (16, 60, w - 32, 34);
+        viewBox.setBounds (16, 58, w - 32, 34);
 
         gridView.setBounds (0, compactTopH + 1, w, h - compactTopH - 1);
-        grid.setCardWidth (150);
+        grid.setCardWidth (library.cardWidth);
         grid.layoutFor (gridView.getMaximumVisibleWidth());
         return;
     }
@@ -412,7 +551,8 @@ void MainComponent::resized()
     sizeSlider.setBounds    (w - 74,  16, 60, 32);   // "SIZE" caption sits left of it
     rescanButton.setBounds  (w - 196, 16, 76, 32);
     foldersButton.setBounds (w - 278, 16, 76, 32);
-    sidecarButton.setBounds (w - 370, 16, 84, 32);
+    sidecarButton.setBounds (w - 362, 16, 76, 32);
+    fullButton.setBounds (w - 418, 16, 52, 32);
 
     const int searchX = sideW + 24;
     search.setBounds (searchX, 14, juce::jmax (180, w - pillRightGap - pillW - 16 - searchX), 36);
@@ -422,6 +562,6 @@ void MainComponent::resized()
     sidebar.refresh();
 
     gridView.setBounds (sideW + 1, topH + 1, w - sideW - 1, h - topH - 1);
-    grid.setCardWidth ((int) sizeSlider.getValue());
+    grid.setCardWidth (library.cardWidth);
     grid.layoutFor (gridView.getMaximumVisibleWidth());
 }

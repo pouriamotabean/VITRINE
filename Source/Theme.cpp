@@ -193,7 +193,7 @@ namespace Theme
         setColour (juce::TextButton::buttonColourId, panelHi);
         setColour (juce::TextButton::buttonOnColourId, accent);
         setColour (juce::TextButton::textColourOffId, text);
-        setColour (juce::TextButton::textColourOnId, bg);
+        setColour (juce::TextButton::textColourOnId, accent);
         setColour (juce::AlertWindow::backgroundColourId, panelHi);
         setColour (juce::AlertWindow::textColourId, text);
         setColour (juce::AlertWindow::outlineColourId, line);
@@ -240,9 +240,9 @@ namespace Theme
         const float cy = (float) y + (float) h * 0.5f;
         g.setColour (line);
         g.fillRoundedRectangle ((float) x, cy - 1.5f, (float) w, 3.0f, 1.5f);
-        g.setColour (dim);
+        g.setColour (accent.withAlpha (0.75f));
         g.fillRoundedRectangle ((float) x, cy - 1.5f, pos - (float) x, 3.0f, 1.5f);
-        g.setColour (text);
+        g.setColour (accent);
         g.fillEllipse (pos - 6.0f, cy - 6.0f, 12.0f, 12.0f);
     }
 

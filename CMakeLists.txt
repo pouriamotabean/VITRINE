@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Vitrine VERSION 0.2.0)
+project(Vitrine VERSION 0.3.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +21,7 @@ endif()
 juce_add_gui_app(Vitrine
     COMPANY_NAME "Pouria Motabean"
     PRODUCT_NAME "Vitrine"
+    ICON_BIG Resources/icon.png
     VERSION ${PROJECT_VERSION})
 
 target_sources(Vitrine PRIVATE
@@ -32,7 +33,10 @@ target_sources(Vitrine PRIVATE
     Source/Thumbs.cpp
     Source/Sidebar.cpp
     Source/Grid.cpp
-    Source/MainComponent.cpp)
+    Source/MainComponent.cpp
+    Source/CubaseLink.cpp)
+
+juce_add_binary_data(VitrineData SOURCES Resources/PouriaMotabean_Vitrine.js)
 
 target_compile_definitions(Vitrine PRIVATE
     JUCE_WEB_BROWSER=0
@@ -48,8 +52,10 @@ target_compile_definitions(Vitrine PRIVATE
 
 target_link_libraries(Vitrine
     PRIVATE
+        VitrineData
         juce::juce_gui_extra
         juce::juce_audio_processors
+        juce::juce_audio_devices
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
