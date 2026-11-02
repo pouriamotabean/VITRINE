@@ -2,6 +2,11 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.6
+
+- Plugin windows stay open after loading (Cubase's Edit is a toggle; Vitrine no longer switches it back off).
+- Instruments: if the selected track is an instrument track with no instrument yet, the instrument goes straight onto it. Otherwise Vitrine asks Cubase for a new instrument track. If Cubase does not add one, Vitrine says so after a while.
+
 ## Version 0.3.5
 
 - Insert slots: Vitrine now listens to Cubase's plugin-identity reports for each slot (slot titles are only numbers), and also remembers the slots it filled itself, so each new effect goes into the next free slot.

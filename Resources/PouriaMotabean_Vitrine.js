@@ -88,6 +88,27 @@ try {
     page.makeValueBinding(instrumentEdit, selected.mInstrumentPluginSlot.mEdit)
 } catch (e) { instrumentEdit = null }
 
+var instrumentPlugin = null   // name of the selected track's instrument ('' = none, null = unknown)
+try {
+    selected.mInstrumentPluginSlot.mOnChangePluginIdentity = function (activeDevice, activeMapping, pluginName) {
+        gDevice = activeDevice
+        gMapping = activeMapping
+        instrumentPlugin = '' + (pluginName || '')
+    }
+} catch (e) {}
+
+function selectedIsInstrumentTrack() {
+    var t = lower(typeOf(da.getBaseObjectID(gMapping)))
+    return t.indexOf('synth') >= 0 || t.indexOf('instrument') >= 0
+}
+
+function selectedInstrumentSlotEmpty() {
+    if (instrumentPlugin !== null) return instrumentPlugin === ''
+    var base = da.getBaseObjectID(gMapping)
+    var slot = findChild(base, ['slot'], 9)
+    return slot >= 0 && childCount(slot) === 0
+}
+
 var gFilled = {}
 var gPendingOpenAt = 0
 var gOpenInstrumentAt = 0            // per track: slots this script filled, in case Cubase does not report names
@@ -156,9 +177,25 @@ function releaseHeld() {
     gHeld = []
 }
 
+// Edit values are toggles (1 = window open, 0 = closed). Opening = set to 1 and leave it.
+// If it is already 1 (window was opened before and closed by hand), go 0 now and 1 on the next ping.
+var gReopen = []
+function openWindow(v) {
+    if (!v || !gDevice) return
+    var cur = 0
+    try { cur = v.getProcessValue ? v.getProcessValue(gDevice) : (v._last || 0) } catch (e) { cur = v._last || 0 }
+    if (cur > 0.5) {
+        try { v.setProcessValue(gDevice, 0) } catch (e) {}
+        gReopen.push(v)
+    } else {
+        try { v.setProcessValue(gDevice, 1) } catch (e) {}
+    }
+    v._last = 1
+}
+
 function openSlotWindow(i) {
     gPendingOpen = -1
-    press(slotEdit[i])
+    openWindow(slotEdit[i])
 }
 
 // first child whose type name contains one of the words, else the fallback index
@@ -308,7 +345,7 @@ function dump() {
         }
     }
     walk(base, 1)
-    lines.push('identityWorks=' + identityWorks + ' viewersWork=' + viewersWork)
+    lines.push('identityWorks=' + identityWorks + ' viewersWork=' + viewersWork + ' instrument="' + instrumentPlugin + '" pending=' + (gPending ? gPending.name : '-'))
     for (var q = 0; q < 8; ++q) lines.push('  slot ' + (q + 1) + ' title="' + slotNames[q] + '" plugin="' + slotPlugin[q] + '"')
     var pm = da.mPluginManager
     if (pm && pm.getNumberOfPluginCollections) {
@@ -341,7 +378,11 @@ function newInstrumentTrack(name, vendor) {
 
 function tryPending() {
     if (!gPending) return
-    if (Date.now() - gPending.at > 30000) { gPending = null; send('E', 'No new instrument track appeared.'); return }
+    if (Date.now() - gPending.at > 30000) {
+        gPending = null
+        send('E', 'Cubase did not add a track. Add an empty instrument track yourself, select it, and click the instrument again.')
+        return
+    }
     var base = da.getBaseObjectID(gMapping)
     if (base === gPending.prevBase) return             // still the old track
     var t = lower(typeOf(base))
@@ -362,6 +403,7 @@ page.mOnActivate = function (activeDevice, activeMapping) {
 selected.mOnTitleChange = function (activeDevice, activeMapping, title) {
     gDevice = activeDevice
     gMapping = activeMapping
+    if (gTrackTitle !== '' + title) instrumentPlugin = null
     gTrackTitle = '' + title
     send('T', gTrackTitle)
     tryPending()
@@ -379,12 +421,19 @@ midiInput.mOnSysex = function (activeDevice, message) {
             releaseHeld()
             tryPending()
             if (gPendingOpen >= 0 && Date.now() - gPendingOpenAt > 900) openSlotWindow(gPendingOpen)
-            if (gOpenInstrumentAt && Date.now() > gOpenInstrumentAt) { gOpenInstrumentAt = 0; press(instrumentEdit) }
+            for (var r = 0; r < gReopen.length; ++r) { try { gReopen[r].setProcessValue(gDevice, 1) } catch (e) {} }
+            gReopen = []
+            if (gOpenInstrumentAt && Date.now() > gOpenInstrumentAt) { gOpenInstrumentAt = 0; openWindow(instrumentEdit) }
         }
         if (cmd === 'P') send('H', 'api=' + (da.mPluginManager && da.mPluginManager.getNumberOfPluginCollections ? '1.3' : 'old') + '\ttrack=' + gTrackTitle)
         else if (cmd === 'L') {
             var parts = text.split('\t')
-            if (parts[0] === 'N') newInstrumentTrack(parts[1] || '', parts[2] || '')
+            if (parts[0] === 'N') {
+                if (gMapping && selectedIsInstrumentTrack() && selectedInstrumentSlotEmpty())
+                    loadPlugin('I', parts[1] || '', parts[2] || '')          // empty instrument track: use it
+                else
+                    newInstrumentTrack(parts[1] || '', parts[2] || '')
+            }
             else loadPlugin(parts[0], parts[1] || '', parts[2] || '')
         }
         else if (cmd === 'D') dump()
