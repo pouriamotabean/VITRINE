@@ -40,13 +40,9 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     foldersButton.onClick = [this] { chooseFolder(); };
     addAndMakeVisible (foldersButton);
 
-    fullButton.setTooltip ("Big window");
-    fullButton.onClick = [this] { if (sidecar) toggleSidecar(); };
-    fullButton.setToggleState (true, juce::dontSendNotification);
-    addAndMakeVisible (fullButton);
-
-    sidecarButton.setTooltip ("Narrow window on the right edge of the screen, always on top of Cubase");
-    sidecarButton.onClick = [this] { if (! sidecar || isCompact()) toggleSidecar(); };
+    // One mode button. Its label is where it takes you: "Sidecar" in the big window, "Full" in the narrow one.
+    sidecarButton.onClick = [this] { toggleSidecar(); };
+    sidecarButton.setColour (juce::TextButton::textColourOffId, Theme::accent);
     addAndMakeVisible (sidecarButton);
 
     moreButton.setTooltip ("Rescan, folders, wide window");
@@ -213,14 +209,15 @@ void MainComponent::toggleSidecar()
     if (w == nullptr)
         return;
 
-    if (! sidecar)
+    if (! isCompact())
     {
+        // -> Sidecar: about 310 real pixels wide, on the right edge of Cubase's window
         boundsBeforeSidecar = w->getBounds();
-        constexpr int sidecarW = 300;    // about the width of Cubase's own right zone
-
-        // sit on the right edge of Cubase's window when it is open, else of the screen
         auto target = WinHelpers::findCubaseWindow();
-        auto area = juce::Desktop::getInstance().getDisplays().getDisplayForRect (target.isEmpty() ? boundsBeforeSidecar : target)->userArea;
+        auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect (target.isEmpty() ? boundsBeforeSidecar : target);
+        auto area = display->userArea;
+        const int sidecarW = juce::roundToInt (310.0 / juce::jmax (1.0, display->scale));
+
         if (target.isEmpty() || target.getWidth() < 600)
             target = area;
         target = target.getIntersection (area);
@@ -230,15 +227,15 @@ void MainComponent::toggleSidecar()
     }
     else
     {
+        // -> Full
         w->setAlwaysOnTop (false);
-        if (! boundsBeforeSidecar.isEmpty())
-            w->setBounds (boundsBeforeSidecar);
+        auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect (w->getBounds());
+        auto area = display->userArea;
+        auto b = boundsBeforeSidecar;
+        if (b.isEmpty() || b.getWidth() < 900)
+            b = area.withSizeKeepingCentre (juce::jmin (1500, area.getWidth() - 40), juce::jmin (940, area.getHeight() - 40));
+        w->setBounds (b);
     }
-
-    sidecar = ! sidecar;
-    sidecarButton.setToggleState (sidecar, juce::dontSendNotification);
-    fullButton.setToggleState (! sidecar, juce::dontSendNotification);
-    sidecarButton.setButtonText (sidecar ? "Full" : "Sidecar");
 }
 
 juce::String MainComponent::linkText() const
@@ -546,28 +543,30 @@ void MainComponent::resized()
     sizeSlider.setVisible (! compact);
 
     search.setTextToShowWhenEmpty (compact ? "Search plugins..." : "Search plugins...   (a maker or part of a name)", Theme::faint);
+    sidecarButton.setButtonText (compact ? "Full" : "Sidecar");
+    sidecarButton.setTooltip (compact ? "Back to the big window" : "Narrow window on the right edge of Cubase, always on top");
+    if (! compact)
+        if (auto* top = getTopLevelComponent())
+            if (top->isAlwaysOnTop()) top->setAlwaysOnTop (false);
 
     if (compact)
     {
         // narrow: search on top, view picker + buttons below, no sidebar
         search.setBounds (12, 12, w - 24, 34);
-        sidecarButton.setBounds (w - 12 - 58, 54, 58, 32);
+        sidecarButton.setBounds (w - 12 - 52, 54, 52, 32);
         moreButton.setBounds (sidecarButton.getX() - 6 - 34, 54, 34, 32);
         viewBox.setBounds (12, 54, moreButton.getX() - 6 - 12, 32);
-        fullButton.setVisible (false);
 
         gridView.setBounds (0, compactTopH + 1, w, h - compactTopH - 1);
         grid.setCardWidth (library.cardWidth);
         grid.layoutFor (gridView.getMaximumVisibleWidth());
         return;
     }
-    fullButton.setVisible (true);
 
     sizeSlider.setBounds    (w - 74,  16, 60, 32);   // "SIZE" caption sits left of it
     rescanButton.setBounds  (w - 196, 16, 76, 32);
     foldersButton.setBounds (w - 278, 16, 76, 32);
     sidecarButton.setBounds (w - 362, 16, 76, 32);
-    fullButton.setBounds (w - 418, 16, 52, 32);
 
     const int searchX = sideW + 24;
     search.setBounds (searchX, 14, juce::jmax (180, w - pillRightGap - pillW - 16 - searchX), 36);

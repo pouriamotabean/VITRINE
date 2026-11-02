@@ -2,6 +2,12 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.4
+
+- Fixed: Cubase names empty insert slots by their number ("1", "2"...); those now count as empty, so effects go into the first free slot again, then the next one.
+- Sidecar is narrower (about 310 screen pixels, like Cubase's own right zone).
+- One mode button: it says **Sidecar** in the big window and **Full** in the narrow one.
+
 ## Version 0.3.3
 
 - Effects go into the first EMPTY insert slot, and the next one into the next empty slot (Cubase's own insert viewers report which slots are taken).

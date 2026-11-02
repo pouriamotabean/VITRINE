@@ -58,8 +58,8 @@ try {
                 gDevice = activeDevice
                 gMapping = activeMapping
                 slotNames[i] = '' + (title || '')
-                if (slotNames[i] !== '') viewersWork = true
-                if (gPendingOpen === i && slotNames[i] !== '') openSlotWindow(i)
+                viewersWork = true
+                if (gPendingOpen === i && !slotTitleIsEmpty(slotNames[i])) openSlotWindow(i)
             }
             var ev = surface.makeCustomValueVariable('vitrineEdit' + i)
             page.makeValueBinding(ev, slot.mEdit)
@@ -153,6 +153,13 @@ function findChild(parent, words, fallbackIndex) {
     return fallbackIndex < n ? child(parent, fallbackIndex) : -1
 }
 
+// Cubase names an empty insert slot after its position ("1", "2", ...) or leaves it blank
+function slotTitleIsEmpty(t) {
+    t = lower(t).replace(/^\s+|\s+$/g, '')
+    return t === '' || /^\d+$/.test(t) || t === 'no effect' || t === 'empty' || t === '-' || t === 'none'
+        || /^(insert|slot)\s*\d+$/.test(t)
+}
+
 function isEmptySlot(slotID) {
     var t = lower(titleOf(slotID)).replace(/^\s+|\s+$/g, '')
     if (t === '' || t === 'no effect' || t === 'no instrument' || t === 'empty' || t === '-' || t === 'none') return true
@@ -234,8 +241,10 @@ function loadPlugin(kind, name, vendor) {
             var slotName = i < slotNames.length ? slotNames[i] : ''
             seen.push('"' + slotName + '"/' + childCount(s))
             var empty
-            if (viewersWork) empty = (slotName === '')                   // Cubase tells us the names
-            else empty = !filled[i] && childCount(s) === 0 && isEmptySlot(s)
+            var recent = filled[i] && (Date.now() - filled[i] < 4000)   // just loaded, Cubase may not have reported yet
+            if (recent) empty = false
+            else if (viewersWork) empty = slotTitleIsEmpty(slotName)      // Cubase tells us the names
+            else empty = isEmptySlot(s)
             if (empty) { slotID = s; slotIndex = i; where = 'insert ' + (i + 1); break }
         }
         if (slotID < 0) {
@@ -260,8 +269,8 @@ function loadPlugin(kind, name, vendor) {
         if (instrumentEdit) gOpenInstrumentAt = Date.now() + 600
     } else if (slotIndex >= 0) {
         if (!gFilled[gTrackTitle]) gFilled[gTrackTitle] = {}
-        gFilled[gTrackTitle][slotIndex] = true
-        slotNames[slotIndex] = slotNames[slotIndex] || found.name
+        gFilled[gTrackTitle][slotIndex] = Date.now()
+        if (slotTitleIsEmpty(slotNames[slotIndex])) slotNames[slotIndex] = found.name
         gPendingOpen = slotIndex
         gPendingOpenAt = Date.now()
     }

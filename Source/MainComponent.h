@@ -37,7 +37,7 @@ private:
     void loadIntoCubase (PluginEntry& e, bool alternate);
     juce::String linkText() const;
     juce::Colour linkColour() const;
-    bool isCompact() const { return getWidth() < 760; }
+    bool isCompact() const { return getWidth() < 640; }
 
     Library& library;
     Scanner scanner;
@@ -51,10 +51,9 @@ private:
 
     juce::TextEditor search;
     juce::TextButton rescanButton { "Rescan" }, foldersButton { "Folders" };
-    juce::TextButton fullButton { "Full" }, sidecarButton { "Sidecar" }, moreButton { "..." };
+    juce::TextButton sidecarButton { "Sidecar" }, moreButton { "..." };
     juce::ComboBox viewBox;
     std::vector<ViewSel> viewChoices;
-    bool sidecar = false;
     juce::Rectangle<int> boundsBeforeSidecar;
     juce::Slider sizeSlider;
 
