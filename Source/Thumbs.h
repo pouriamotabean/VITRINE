@@ -9,4 +9,8 @@ namespace Thumbs
 {
     juce::File fileFor (const PluginEntry& e);
     void draw (juce::Graphics& g, juce::Rectangle<float> r, const PluginEntry& e, float corner);
+    bool hasPicture (const PluginEntry& e);
+
+    // child-process entry point: open the plugin's window, photograph it, write a PNG
+    int runChildShot (const juce::String& path, const juce::String& name, const juce::File& out);
 }

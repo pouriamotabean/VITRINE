@@ -19,6 +19,9 @@ namespace
         o->setProperty ("favorite", e.favorite);
         o->setProperty ("hidden", e.hidden);
         o->setProperty ("shortcut", e.shortcut);
+        o->setProperty ("hotMods", e.hotMods);
+        o->setProperty ("hotKey", e.hotKey);
+        o->setProperty ("noPicture", e.noPicture);
         o->setProperty ("fileTime", e.fileTime);
         o->setProperty ("lastUsed", e.lastUsed);
         o->setProperty ("added", e.added);
@@ -42,6 +45,9 @@ namespace
         e.favorite     = (bool) v["favorite"];
         e.hidden       = (bool) v["hidden"];
         e.shortcut     = v["shortcut"].toString();
+        e.hotMods      = (int) v["hotMods"];
+        e.hotKey       = (int) v["hotKey"];
+        e.noPicture    = (bool) v["noPicture"];
         e.fileTime     = (juce::int64) v["fileTime"];
         e.lastUsed     = (juce::int64) v["lastUsed"];
         e.added        = (juce::int64) v["added"];

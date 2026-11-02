@@ -12,6 +12,7 @@ public:
 
     std::function<void (const juce::String&)> onToast;
     std::function<void (PluginEntry&, bool alternate)> onActivate;   // click on a card (alternate = Ctrl+click)
+    std::function<void (const juce::String& id)> onTakePicture, onChoosePicture, onSetShortcut;
 
     void setView (const ViewSel& v, const juce::String& search);
     void setCardWidth (int w);

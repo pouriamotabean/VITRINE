@@ -2,6 +2,13 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.4.0
+
+- **Pictures**: More > "Take pictures of all plugins". Each VST3 plugin is opened by a helper process for a few seconds and its window is photographed (also GPU-drawn ones). A plugin that fails (black window, licence popup, crash) keeps its icon card and is not retried until you choose "Retake pictures that failed".
+- Right-click a card: take its picture again, or use any image file as its picture.
+- **Keyboard shortcuts**: right-click a card > "Set a keyboard shortcut". Ctrl/Alt + a letter or number, or an F key. They work everywhere, also while Cubase is in front, and load the plugin on the selected track. The key is shown on the card.
+- The Folders button became **More** (folders, rescan, pictures, data folder).
+
 ## Version 0.3.7
 
 - New instrument track: Cubase's Add Track command has different names; Vitrine now tries them one after another (every 2.5 s until a new track appears) and remembers the one that works. The diagnostics show which one it was.
@@ -71,7 +78,7 @@ A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument
 
 Your library is saved in `%APPDATA%\Vitrine\library.json`.
 
-## Coming next
+## Notes
 
-- Cubase link: click a card and the plugin lands on the selected track (Cubase 15.0.20 or newer).
-- Pictures of each plugin's own interface on its card, keyboard shortcuts, Sidecar and Mini views.
+- New instrument tracks: Cubase shows its Add Track dialog; press Add Track there.
+- VST2 plugins are listed but cannot be photographed (Vitrine opens VST3 only).

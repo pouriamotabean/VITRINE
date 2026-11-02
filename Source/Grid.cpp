@@ -376,6 +376,10 @@ void Grid::cardMenu (Card& c)
     m.addItem (4, "Show in folder", juce::File (e.path).exists());
     m.addItem (6, e.hidden ? "Show again" : "Hide from Vitrine");
     m.addSeparator();
+    m.addItem (7, e.format == "VST3" ? "Take picture of its window" : "Take picture (VST3 only)", e.format == "VST3");
+    m.addItem (8, "Use an image file as picture...");
+    m.addItem (9, e.shortcut.isNotEmpty() ? "Shortcut: " + e.shortcut + "  (change...)" : "Set a keyboard shortcut...");
+    m.addSeparator();
     m.addItem (5, e.format + (e.vstCategory.isNotEmpty() ? "  -  " + e.vstCategory : juce::String()), false);
 
     juce::Component::SafePointer<Grid> safe (this);
@@ -391,6 +395,9 @@ void Grid::cardMenu (Card& c)
         else if (r == 2 && deckView >= 0) lib.removeFromDeck (deckView, id);
         else if (r == 3) lib.setUserCategory (id, en->autoCategory);
         else if (r == 4) juce::File (en->path).revealToUser();
+        else if (r == 7) { if (safe->onTakePicture) safe->onTakePicture (id); }
+        else if (r == 8) { if (safe->onChoosePicture) safe->onChoosePicture (id); }
+        else if (r == 9) { if (safe->onSetShortcut) safe->onSetShortcut (id); }
         else if (r == 6)
         {
             const bool hide = ! en->hidden;

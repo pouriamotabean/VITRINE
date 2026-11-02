@@ -1,6 +1,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "MainComponent.h"
 #include "Scanner.h"
+#include "Thumbs.h"
 
 class VitrineApp : public juce::JUCEApplication
 {
@@ -18,6 +19,18 @@ public:
         if (args[0] == "--scan" && args.size() >= 3)
         {
             setApplicationReturnValue (Scanner::runChildScan (args[1], juce::File (args[2])));
+            quit();
+            return;
+        }
+
+        // helper process: photograph one plugin and exit
+        if (args[0] == "--shot" && args.size() >= 4)
+        {
+            const int r = Thumbs::runChildShot (args[1], args[2], juce::File (args[3]));
+            std::fprintf (stderr, "vitrine shot result %d\n", r);
+            std::fflush (stderr);
+            juce::Process::terminate();     // skip plugin unloading (some plugins hang there)
+            setApplicationReturnValue (r);
             quit();
             return;
         }

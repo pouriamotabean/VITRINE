@@ -2,6 +2,7 @@
 #include "Categories.h"
 #include "Filter.h"
 #include "WinHelpers.h"
+#include "Thumbs.h"
 
 namespace
 {
@@ -36,8 +37,9 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     rescanButton.onClick = [this] { startScan(); };
     addAndMakeVisible (rescanButton);
 
-    foldersButton.setTooltip ("Add a folder where you keep VST3 plugins");
-    foldersButton.onClick = [this] { chooseFolder(); };
+    foldersButton.setButtonText ("More");
+    foldersButton.setTooltip ("Plugin folders, pictures, rescan");
+    foldersButton.onClick = [this] { showMainMenu(); };
     addAndMakeVisible (foldersButton);
 
     // One mode button. Its label is where it takes you: "Sidecar" in the big window, "Full" in the narrow one.
@@ -86,6 +88,21 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
 
     grid.onToast = [this] (const juce::String& s) { showToast (s); };
     grid.onActivate = [this] (PluginEntry& e, bool alt) { loadIntoCubase (e, alt); };
+    grid.onTakePicture = [this] (const juce::String& id)
+    {
+        if (auto* e = library.find (id)) { e->noPicture = false; Thumbs::fileFor (*e).deleteFile(); }
+        startPictures ({ id }, false);
+    };
+    grid.onChoosePicture = [this] (const juce::String& id) { choosePicture (id); };
+    grid.onSetShortcut  = [this] (const juce::String& id) { editShortcut (id); };
+
+    WinHelpers::setHotkeyCallback ([this] (int hid)
+    {
+        if (juce::isPositiveAndBelow (hid - 1, (int) hotkeyIds.size()))
+            if (auto* e = library.find (hotkeyIds[(size_t) (hid - 1)]))
+                loadIntoCubase (*e, false);
+    });
+    registerShortcuts();
 
     link.onStateChange = [this] { repaint(); };
     link.onResult = [this] (bool ok, const juce::String& t) { showToast ((ok ? "" : "Cubase: ") + t, ok ? 2600 : 5200); };
@@ -115,6 +132,9 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
 
 MainComponent::~MainComponent()
 {
+    WinHelpers::unregisterAllHotkeys();
+    WinHelpers::setHotkeyCallback (nullptr);
+    if (picProc != nullptr && picProc->isRunning()) picProc->kill();
     library.removeChangeListener (this);
 }
 
@@ -344,12 +364,289 @@ void MainComponent::mouseUp (const juce::MouseEvent& e)
         showLinkMenu();
 }
 
+void MainComponent::showMainMenu()
+{
+    juce::PopupMenu m;
+    m.addItem (1, "Add a plugin folder...");
+    m.addItem (2, "Rescan plugins");
+    m.addSeparator();
+    m.addItem (3, "Take pictures of all plugins...", picProc == nullptr);
+    m.addItem (4, "Retake pictures that failed", picProc == nullptr);
+    if (picProc != nullptr) m.addItem (5, "Stop taking pictures");
+    m.addSeparator();
+    m.addItem (6, "Open Vitrine's data folder");
+
+    juce::Component::SafePointer<MainComponent> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&foldersButton), [safe] (int r)
+    {
+        if (safe == nullptr) return;
+        if (r == 1) safe->chooseFolder();
+        if (r == 2) safe->startScan();
+        if (r == 3) safe->startPictures ({}, true);
+        if (r == 4)
+        {
+            juce::StringArray ids;
+            for (auto& e : safe->library.plugins())
+                if (e.noPicture && ! e.hidden) { e.noPicture = false; ids.add (e.id); }
+            if (ids.isEmpty()) safe->showToast ("No failed pictures.");
+            else safe->startPictures (ids, true);
+        }
+        if (r == 5) safe->stopPictures();
+        if (r == 6) Library::dataFolder().startAsProcess();
+    });
+}
+
+//==============================================================================
+// Pictures: each plugin is opened by a helper process, shown for a moment and photographed.
+
+void MainComponent::startPictures (juce::StringArray ids, bool askFirst)
+{
+    if (picProc != nullptr) return;
+
+    if (ids.isEmpty())
+        for (auto& e : library.plugins())
+            if (e.format == "VST3" && ! e.hidden && ! e.noPicture && ! Thumbs::hasPicture (e))
+                ids.add (e.id);
+
+    if (ids.isEmpty())
+    {
+        showToast ("Every plugin already has a picture.");
+        return;
+    }
+
+    auto go = [this, ids]
+    {
+        picQueue = ids;
+        picTotal = ids.size();
+        picDone = picFailed = 0;
+        pictureTick();
+    };
+
+    if (! askFirst) { go(); return; }
+
+    const int mins = juce::jmax (1, juce::roundToInt (ids.size() * 4.0 / 60.0));
+    juce::Component::SafePointer<MainComponent> safe (this);
+    juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::NoIcon, "Take pictures",
+        "Vitrine will open " + juce::String (ids.size()) + " plugins one by one for a few seconds and photograph their windows "
+        "(about " + juce::String (mins) + " min).\n\n"
+        "Leave the computer alone meanwhile: the plugin windows pop up in the top-left corner. "
+        "Cubase can stay open. You can stop any time from the menu.",
+        "Start", "Cancel", this,
+        juce::ModalCallbackFunction::create ([safe, go] (int r) { if (safe != nullptr && r == 1) go(); }));
+}
+
+void MainComponent::stopPictures()
+{
+    picQueue.clear();
+    if (picProc != nullptr && picProc->isRunning()) picProc->kill();
+    picProc.reset();
+    picText = {};
+    showToast ("Stopped. " + juce::String (picDone) + " pictures taken.");
+}
+
+void MainComponent::pictureTick()
+{
+    if (picProc != nullptr)
+    {
+        const bool running = picProc->isRunning();
+        const bool late = juce::Time::getMillisecondCounter() - picStarted > 25000;
+        if (running && ! late)
+            return;
+
+        if (running) picProc->kill();
+        picProc.reset();
+
+        if (auto* e = library.find (picId))
+        {
+            if (picOut.existsAsFile() && picOut.getSize() > 1000)
+            {
+                const auto dest = Thumbs::fileFor (*e);
+                dest.getParentDirectory().createDirectory();
+                dest.deleteFile();
+                picOut.moveFileTo (dest);
+                e->noPicture = false;
+                ++picDone;
+                grid.repaint();
+            }
+            else
+            {
+                e->noPicture = true;
+                ++picFailed;
+                if (picTotal == 1) showToast ("No picture for " + e->name + " (its window did not open or stayed black).", 4500);
+            }
+            library.saveSoon();
+        }
+        picOut.deleteFile();
+    }
+
+    if (picQueue.isEmpty())
+    {
+        if (picText.isNotEmpty())
+        {
+            picText = {};
+            if (picTotal > 1)
+                showToast (juce::String (picDone) + " pictures taken" + (picFailed > 0 ? ", " + juce::String (picFailed) + " could not be taken." : "."), 5000);
+            else if (picDone == 1)
+                showToast ("Picture taken.");
+        }
+        return;
+    }
+
+    picId = picQueue[0];
+    picQueue.remove (0);
+    auto* e = library.find (picId);
+    if (e == nullptr) { pictureTick(); return; }
+
+    picOut = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("vitrine_shot_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)) + ".png");
+    picProc = std::make_unique<juce::ChildProcess>();
+    picStarted = juce::Time::getMillisecondCounter();
+    const auto exe = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName();
+    picText = "Pictures " + juce::String (picTotal - picQueue.size()) + " / " + juce::String (picTotal) + "  -  " + e->name;
+
+    if (! picProc->start (juce::StringArray { exe, "--shot", e->path, e->name, picOut.getFullPathName() }, 0))
+    {
+        picProc.reset();
+        e->noPicture = true;
+        ++picFailed;
+    }
+}
+
+void MainComponent::choosePicture (const juce::String& id)
+{
+    chooser = std::make_unique<juce::FileChooser> ("Picture for this plugin", juce::File(), "*.png;*.jpg;*.jpeg");
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this, id] (const juce::FileChooser& fc)
+    {
+        const auto f = fc.getResult();
+        auto* e = library.find (id);
+        if (e == nullptr || ! f.existsAsFile()) return;
+        auto img = juce::ImageFileFormat::loadFrom (f);
+        if (! img.isValid()) { showToast ("That file is not an image Vitrine can read."); return; }
+        if (img.getWidth() > 640)
+            img = img.rescaled (640, juce::roundToInt (img.getHeight() * 640.0 / img.getWidth()), juce::Graphics::highResamplingQuality);
+        const auto dest = Thumbs::fileFor (*e);
+        dest.getParentDirectory().createDirectory();
+        dest.deleteFile();
+        juce::FileOutputStream os (dest);
+        juce::PNGImageFormat().writeImageToStream (img, os);
+        os.flush();
+        e->noPicture = false;
+        library.saveSoon();
+        grid.repaint();
+    });
+}
+
+//==============================================================================
+// Shortcuts: system-wide, so they also work while Cubase is in front.
+
+void MainComponent::registerShortcuts()
+{
+    WinHelpers::unregisterAllHotkeys();
+    hotkeyIds.clear();
+    hotkeyFailed.clear();
+    for (auto& e : library.plugins())
+        if (e.hotKey != 0)
+        {
+            hotkeyIds.push_back (e.id);
+            if (! WinHelpers::registerHotkey ((int) hotkeyIds.size(), { e.hotMods, e.hotKey }))
+                hotkeyFailed.add (e.id);
+        }
+}
+
+namespace
+{
+    struct KeyCatcher : juce::Component
+    {
+        std::function<void (const juce::KeyPress&)> onKey;
+        juce::String text = "Press the keys now...";
+        KeyCatcher() { setWantsKeyboardFocus (true); setSize (360, 64); }
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (Theme::panel);
+            g.fillRoundedRectangle (getLocalBounds().toFloat().reduced (2), 8.0f);
+            g.setColour (Theme::accent);
+            g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (2), 8.0f, 1.2f);
+            g.setColour (Theme::text);
+            g.setFont (Theme::font (18.0f, true));
+            g.drawText (text, getLocalBounds(), juce::Justification::centred);
+        }
+        bool keyPressed (const juce::KeyPress& k) override { if (onKey) onKey (k); return true; }
+        void visibilityChanged() override { if (isShowing()) grabKeyboardFocus(); }
+    };
+}
+
+void MainComponent::editShortcut (const juce::String& id)
+{
+    auto* e = library.find (id);
+    if (e == nullptr) return;
+
+    auto* w = new juce::AlertWindow ("Shortcut for " + e->name,
+        "Works everywhere, also while Cubase is in front.\nUse Ctrl or Alt with a letter or number (e.g. Ctrl+Alt+Q), or an F key.\n"
+        "Backspace removes the shortcut, Esc cancels.", juce::MessageBoxIconType::NoIcon, this);
+    auto* catcher = new KeyCatcher();
+    w->addCustomComponent (catcher);
+    w->addButton ("Cancel", 0);
+
+    juce::Component::SafePointer<MainComponent> safe (this);
+    juce::Component::SafePointer<juce::AlertWindow> safeW (w);
+    catcher->onKey = [safe, safeW, catcher, id] (const juce::KeyPress& k)
+    {
+        if (safe == nullptr || safeW == nullptr) return;
+        auto* en = safe->library.find (id);
+        if (en == nullptr) return;
+
+        if (k == juce::KeyPress::escapeKey) { safeW->exitModalState (0); return; }
+        if (k == juce::KeyPress::backspaceKey || k == juce::KeyPress::deleteKey)
+        {
+            en->hotKey = en->hotMods = 0;
+            en->shortcut = {};
+            safe->library.saveSoon();
+            safe->registerShortcuts();
+            safe->grid.repaint();
+            safeW->exitModalState (1);
+            return;
+        }
+
+        WinHelpers::Hotkey hk;
+        if (! WinHelpers::hotkeyFromKeyPress (k, hk))
+        {
+            const int code = k.getKeyCode();
+            const bool modifierOnly = code == 0 || code == 0x10 || code == 0x11 || code == 0x12;
+            if (! modifierOnly) { catcher->text = "Add Ctrl or Alt"; catcher->repaint(); }
+            return;
+        }
+
+        // free it from any other plugin
+        for (auto& other : safe->library.plugins())
+            if (other.hotKey == hk.key && other.hotMods == hk.mods && other.id != id)
+            {
+                other.hotKey = other.hotMods = 0;
+                other.shortcut = {};
+            }
+
+        en->hotMods = hk.mods;
+        en->hotKey = hk.key;
+        en->shortcut = WinHelpers::hotkeyText (hk);
+        safe->library.saveSoon();
+        safe->registerShortcuts();
+        safe->grid.repaint();
+
+        const bool ok = ! safe->hotkeyFailed.contains (id);
+        safe->showToast (en->name + ": " + en->shortcut + (ok ? "" : "  - taken by another app, choose another"));
+        safeW->exitModalState (1);
+    };
+
+    w->enterModalState (true, nullptr, true);
+}
+
 void MainComponent::showMoreMenu()
 {
     juce::PopupMenu m;
     m.addItem (1, "Rescan plugins");
     m.addItem (2, "Add a plugin folder...");
     m.addItem (3, "New deck");
+    m.addItem (4, "Take pictures of all plugins...", picProc == nullptr);
+    if (picProc != nullptr) m.addItem (5, "Stop taking pictures");
     juce::PopupMenu cols;
     for (int n = 1; n <= 3; ++n)
         cols.addItem (2000 + n, juce::String (n) + (n == 1 ? " column" : " columns"), true, library.sidecarColumns == n);
@@ -367,6 +664,8 @@ void MainComponent::showMoreMenu()
         if (r == 1) safe->startScan();
         if (r == 2) safe->chooseFolder();
         if (r == 3) safe->sidebar.newDeck();
+        if (r == 4) safe->startPictures ({}, true);
+        if (r == 5) safe->stopPictures();
     });
 }
 
@@ -386,6 +685,8 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
 
 void MainComponent::timerCallback()
 {
+    pictureTick();
+
     auto found = scanner.takeResults();
     for (auto& e : found)
         library.upsert (e);
@@ -398,6 +699,17 @@ void MainComponent::timerCallback()
         library.save();
         scanText = {};
         showToast (juce::String ((int) library.plugins().size()) + " plugins in your library.");
+    }
+
+    if (picText.isNotEmpty() && ! scanner.isScanning() && scanText != picText)
+    {
+        scanText = picText;
+        repaint (0, 0, getWidth(), 120);
+    }
+    if (picText.isEmpty() && ! scanner.isScanning() && scanText.startsWith ("Pictures"))
+    {
+        scanText = {};
+        repaint (0, 0, getWidth(), 120);
     }
 
     if (scanner.isScanning())

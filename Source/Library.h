@@ -17,7 +17,9 @@ struct PluginEntry
     bool isInstrument = false;
     bool favorite = false;
     bool hidden = false;        // hidden from Vitrine by the user (files untouched)
-    juce::String shortcut;      // key badge (session 3)
+    juce::String shortcut;      // key badge text, e.g. "Ctrl+Alt+Q"
+    int hotMods = 0, hotKey = 0; // system-wide shortcut
+    bool noPicture = false;     // picture could not be taken (do not retry automatically)
     juce::int64 fileTime = 0;
     juce::int64 lastUsed = 0;   // ms since epoch, 0 = never
     juce::int64 added = 0;

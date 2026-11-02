@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Vitrine VERSION 0.3.7)
+project(Vitrine VERSION 0.4.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,7 +49,8 @@ target_compile_definitions(Vitrine PRIVATE
     JUCE_PLUGINHOST_AU=0
     JUCE_PLUGINHOST_LADSPA=0
     JUCE_PLUGINHOST_LV2=0
-    JUCE_USE_WINRT_MIDI=0)
+    JUCE_USE_WINRT_MIDI=0
+    JUCE_MODAL_LOOPS_PERMITTED=1)
 
 target_link_libraries(Vitrine
     PRIVATE

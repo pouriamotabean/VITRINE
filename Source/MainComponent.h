@@ -35,6 +35,17 @@ private:
     void showMoreMenu();
     void showLinkMenu();
     void loadIntoCubase (PluginEntry& e, bool alternate);
+
+    // pictures
+    void startPictures (juce::StringArray ids, bool askFirst);
+    void stopPictures();
+    void pictureTick();
+    void choosePicture (const juce::String& id);
+    void showMainMenu();
+
+    // shortcuts
+    void editShortcut (const juce::String& id);
+    void registerShortcuts();
     juce::String linkText() const;
     juce::Colour linkColour() const;
     bool isCompact() const { return getWidth() < 640; }
@@ -62,4 +73,14 @@ private:
     juce::uint32 toastUntil = 0;
     juce::String scanText;
     std::unique_ptr<juce::FileChooser> chooser;
+
+    juce::StringArray picQueue;
+    int picTotal = 0, picDone = 0, picFailed = 0;
+    std::unique_ptr<juce::ChildProcess> picProc;
+    juce::String picId;
+    juce::File picOut;
+    juce::uint32 picStarted = 0;
+    juce::String picText;
+    std::vector<juce::String> hotkeyIds;      // index = hotkey id - 1
+    juce::StringArray hotkeyFailed;
 };
