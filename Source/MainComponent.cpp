@@ -422,6 +422,7 @@ void MainComponent::showMainMenu()
     m.addSubMenu ("Sort", sortMenu);
     m.addSeparator();
     m.addItem (6, "Open Vitrine's data folder");
+    m.addItem (9, "Show the scan report (which files were taken or skipped)");
 
     juce::Component::SafePointer<MainComponent> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&foldersButton), [safe] (int r)
@@ -448,6 +449,11 @@ void MainComponent::showMainMenu()
             else safe->startPictures (ids, true);
         }
         if (r == 6) Library::dataFolder().startAsProcess();
+        if (r == 9)
+        {
+            const auto f = Library::dataFolder().getChildFile ("scan-report.txt");
+            if (f.existsAsFile()) f.startAsProcess(); else safe->showToast ("No report yet: press Rescan first.");
+        }
         if (r == 7) { safe->view = { ViewSel::hidden }; safe->search.clear(); safe->applyView(); }
         if (r >= 20 && r <= 22)
         {

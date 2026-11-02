@@ -2,6 +2,11 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.6.2
+
+- Fixed: 0.6.1 added many files that are not plugins (helper DLLs from the folders it searched). Every VST2 file is now checked before it is listed: it must be a 64-bit DLL that exports VSTPluginMain. The wrong cards disappear on the next Rescan.
+- More > "Show the scan report": every folder searched and every DLL taken or skipped, with the reason.
+
 ## Version 0.6.1
 
 - VST2 plugins are also found in the VST2 folders set in Cubase (Plug-in Manager), and in the folders added under More > Folders (e.g. C:\64\SoundToys).

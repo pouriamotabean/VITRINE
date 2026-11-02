@@ -76,6 +76,67 @@ juce::StringArray Scanner::findVst3() const
     return found;
 }
 
+namespace
+{
+    // Reads a DLL's header and export table WITHOUT loading it.
+    // A VST2 plugin is a 64-bit DLL that exports "VSTPluginMain" (older ones: "main").
+    // Returns an empty string if it is a plugin, otherwise the reason it was skipped.
+    juce::String vst2Problem (const juce::File& f)
+    {
+        juce::FileInputStream in (f);
+        if (! in.openedOk()) return "cannot open";
+
+        auto u16 = [&] (juce::int64 pos) { in.setPosition (pos); return (juce::uint32) (juce::uint16) in.readShort(); };
+        auto u32 = [&] (juce::int64 pos) { in.setPosition (pos); return (juce::uint32) in.readInt(); };
+
+        if (u16 (0) != 0x5A4D) return "not a DLL";
+        const auto pe = (juce::int64) u32 (0x3C);
+        if (pe <= 0 || pe > in.getTotalLength() - 256 || u32 (pe) != 0x00004550) return "not a DLL";
+
+        const auto machine = u16 (pe + 4);
+        if (machine != 0x8664) return "32-bit or not x64";
+        const int numSections = (int) u16 (pe + 6);
+        const auto optSize = u16 (pe + 20);
+        const auto opt = pe + 24;
+        const auto magic = u16 (opt);
+        const auto dirs = opt + (magic == 0x20B ? 112 : 96);
+        const auto expRva = u32 (dirs);
+        if (expRva == 0) return "exports nothing";
+
+        const auto sect = opt + optSize;
+        auto toOffset = [&] (juce::uint32 rva) -> juce::int64
+        {
+            for (int i = 0; i < numSections && i < 96; ++i)
+            {
+                const auto h = sect + i * 40;
+                const auto vsize = u32 (h + 8), va = u32 (h + 12), rawSize = u32 (h + 16), raw = u32 (h + 20);
+                if (rva >= va && rva < va + juce::jmax (vsize, rawSize))
+                    return (juce::int64) raw + (rva - va);
+            }
+            return -1;
+        };
+
+        const auto exp = toOffset (expRva);
+        if (exp < 0) return "exports unreadable";
+        const auto numNames = juce::jmin ((juce::uint32) 5000, u32 (exp + 24));
+        const auto namesOff = toOffset (u32 (exp + 32));
+        if (namesOff < 0) return "exports unreadable";
+
+        for (juce::uint32 i = 0; i < numNames; ++i)
+        {
+            const auto nameOff = toOffset (u32 (namesOff + 4 * (juce::int64) i));
+            if (nameOff < 0) continue;
+            in.setPosition (nameOff);
+            char buf[32] = {};
+            in.read (buf, 31);
+            const juce::String name (buf);
+            if (name == "VSTPluginMain" || name == "main" || name == "VSTMain")
+                return {};
+        }
+        return "not a VST2 plugin (no VSTPluginMain)";
+    }
+}
+
 juce::StringArray Scanner::findVst2() const
 {
     juce::StringArray folders;
@@ -119,15 +180,35 @@ juce::StringArray Scanner::findVst2() const
             folders.addIfNotAlreadyThere (f);
 
     juce::StringArray dlls;
+    juce::String report;
+    report << "Vitrine " << JUCE_APPLICATION_VERSION_STRING << " - VST2 scan report\r\n\r\n";
     for (auto& f : folders)
     {
         const juce::File dir (f);
         if (! dir.isDirectory())
+        {
+            report << "[missing folder] " << f << "\r\n";
             continue;
+        }
+        report << "[folder] " << dir.getFullPathName() << "\r\n";
 
         for (const auto& e : juce::RangedDirectoryIterator (dir, true, "*.dll", juce::File::findFiles))
-            dlls.addIfNotAlreadyThere (e.getFile().getFullPathName());
+        {
+            const auto file = e.getFile();
+            const auto why = vst2Problem (file);
+            if (why.isEmpty())
+            {
+                dlls.addIfNotAlreadyThere (file.getFullPathName());
+                report << "   OK       " << file.getFullPathName() << "\r\n";
+            }
+            else
+                report << "   skipped  " << file.getFullPathName() << "  (" << why << ")\r\n";
+        }
     }
+    report << "\r\n" << dlls.size() << " VST2 plugins.\r\n";
+    Library::dataFolder().createDirectory();
+    Library::dataFolder().getChildFile ("scan-report.txt").replaceWithText (report);
+
     dlls.sortNatural();
     return dlls;
 }
