@@ -45,6 +45,7 @@ private:
     ViewSel view;
     juce::String searchText, status;
     int cardW = 210;
+    int pad = 24;                  // side margin; smaller in narrow windows
     std::vector<Section> sections;
     std::vector<Card> cards;
     int hover = -1, dropBefore = -1, pressed = -1;

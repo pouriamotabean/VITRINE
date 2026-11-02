@@ -1,10 +1,11 @@
 #include "MainComponent.h"
 #include "Categories.h"
 #include "Filter.h"
+#include "WinHelpers.h"
 
 namespace
 {
-    constexpr int topH = 64, compactTopH = 114, sideW = 236, pillW = 210, pillRightGap = 436;
+    constexpr int topH = 64, compactTopH = 110, sideW = 236, pillW = 210, pillRightGap = 436;
 }
 
 MainComponent::MainComponent (Library& lib, bool scanNow)
@@ -45,7 +46,7 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     addAndMakeVisible (fullButton);
 
     sidecarButton.setTooltip ("Narrow window on the right edge of the screen, always on top of Cubase");
-    sidecarButton.onClick = [this] { if (! sidecar) toggleSidecar(); };
+    sidecarButton.onClick = [this] { if (! sidecar || isCompact()) toggleSidecar(); };
     addAndMakeVisible (sidecarButton);
 
     moreButton.setTooltip ("Rescan, folders, wide window");
@@ -215,8 +216,16 @@ void MainComponent::toggleSidecar()
     if (! sidecar)
     {
         boundsBeforeSidecar = w->getBounds();
-        auto area = juce::Desktop::getInstance().getDisplays().getDisplayForRect (boundsBeforeSidecar)->userArea;
-        w->setBounds (area.getRight() - 440, area.getY(), 440, area.getHeight());
+        constexpr int sidecarW = 300;    // about the width of Cubase's own right zone
+
+        // sit on the right edge of Cubase's window when it is open, else of the screen
+        auto target = WinHelpers::findCubaseWindow();
+        auto area = juce::Desktop::getInstance().getDisplays().getDisplayForRect (target.isEmpty() ? boundsBeforeSidecar : target)->userArea;
+        if (target.isEmpty() || target.getWidth() < 600)
+            target = area;
+        target = target.getIntersection (area);
+
+        w->setBounds (target.getRight() - sidecarW, target.getY(), sidecarW, target.getHeight());
         w->setAlwaysOnTop (true);
     }
     else
@@ -229,6 +238,7 @@ void MainComponent::toggleSidecar()
     sidecar = ! sidecar;
     sidecarButton.setToggleState (sidecar, juce::dontSendNotification);
     fullButton.setToggleState (! sidecar, juce::dontSendNotification);
+    sidecarButton.setButtonText (sidecar ? "Full" : "Sidecar");
 }
 
 juce::String MainComponent::linkText() const
@@ -445,16 +455,16 @@ void MainComponent::paint (juce::Graphics& g)
         if (scanText.isNotEmpty())
         {
             g.setColour (Theme::accent.withAlpha (0.9f));
-            g.drawText (scanText, 16, compactTopH - 12, getWidth() - 32, 12, juce::Justification::centredLeft, true);
+            g.drawText (scanText, 12, compactTopH - 14, getWidth() - 24, 12, juce::Justification::centredLeft, true);
             pillBounds = {};
         }
         else
         {
-            pillBounds = { 16, compactTopH - 13, getWidth() - 32, 13 };
+            pillBounds = { 12, compactTopH - 14, getWidth() - 24, 13 };
             g.setColour (linkColour());
-            g.fillEllipse (16.0f, (float) compactTopH - 9.0f, 6.0f, 6.0f);
+            g.fillEllipse (12.0f, (float) compactTopH - 10.0f, 6.0f, 6.0f);
             g.setColour (Theme::dim);
-            g.drawText (linkText(), 28, compactTopH - 13, getWidth() - 44, 12, juce::Justification::centredLeft, true);
+            g.drawText (linkText(), 24, compactTopH - 14, getWidth() - 36, 12, juce::Justification::centredLeft, true);
         }
         return;
     }
@@ -539,18 +549,19 @@ void MainComponent::resized()
 
     if (compact)
     {
-        // narrow: search + buttons on one row, a view picker below, no sidebar
-        sidecarButton.setBounds (w - 16 - 70, 14, 70, 34);
-        fullButton.setBounds (sidecarButton.getX() - 4 - 48, 14, 48, 34);
-        moreButton.setBounds (fullButton.getX() - 8 - 38, 14, 38, 34);
-        search.setBounds (16, 13, moreButton.getX() - 8 - 16, 36);
-        viewBox.setBounds (16, 58, w - 32, 34);
+        // narrow: search on top, view picker + buttons below, no sidebar
+        search.setBounds (12, 12, w - 24, 34);
+        sidecarButton.setBounds (w - 12 - 58, 54, 58, 32);
+        moreButton.setBounds (sidecarButton.getX() - 6 - 34, 54, 34, 32);
+        viewBox.setBounds (12, 54, moreButton.getX() - 6 - 12, 32);
+        fullButton.setVisible (false);
 
         gridView.setBounds (0, compactTopH + 1, w, h - compactTopH - 1);
         grid.setCardWidth (library.cardWidth);
         grid.layoutFor (gridView.getMaximumVisibleWidth());
         return;
     }
+    fullButton.setVisible (true);
 
     sizeSlider.setBounds    (w - 74,  16, 60, 32);   // "SIZE" caption sits left of it
     rescanButton.setBounds  (w - 196, 16, 76, 32);

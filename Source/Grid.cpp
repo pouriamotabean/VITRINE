@@ -6,7 +6,7 @@
 
 namespace
 {
-    constexpr int pad = 24, gap = 16, headerH = 46, textH = 50, recentMax = 12;
+    constexpr int gap = 16, headerH = 46, textH = 50, recentMax = 12;
     constexpr float corner = 10.0f;
 }
 
@@ -88,6 +88,7 @@ void Grid::layoutFor (int width)
     if (width <= 0)
         return;
 
+    pad = width < 420 ? 12 : 24;
     const int avail = width - 2 * pad;
     const int cols = juce::jmax (1, (avail + gap) / (cardW + gap));
     const int cw = (avail - (cols - 1) * gap) / cols;

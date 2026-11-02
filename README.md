@@ -2,6 +2,11 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.3.2
+
+- Sidecar is 300 px wide (like Cubase's right zone) and sits on the right edge of Cubase's window.
+- Better detection of empty insert slots; when none is found, the message lists what Cubase reports.
+
 ## Version 0.3.1
 
 - Instruments: a click makes a **new instrument track** with that instrument (Cubase's own Add Track > Instrument). Ctrl+click swaps the instrument on the selected instrument track instead.

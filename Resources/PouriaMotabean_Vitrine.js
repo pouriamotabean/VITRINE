@@ -104,8 +104,11 @@ function findChild(parent, words, fallbackIndex) {
 }
 
 function isEmptySlot(slotID) {
-    var t = lower(titleOf(slotID))
-    return t === '' || t === 'no effect' || t === 'no instrument' || t === 'empty' || t === '-' || t === 'none'
+    var t = lower(titleOf(slotID)).replace(/^\s+|\s+$/g, '')
+    if (t === '' || t === 'no effect' || t === 'no instrument' || t === 'empty' || t === '-' || t === 'none') return true
+    // Cubase may name an empty slot after its position ("Insert 1", "Slot 3", "1")
+    if (/^(insert|slot|fx|effect)?\s*\d+$/.test(t)) return true
+    return false
 }
 
 // find a plugin UID by name (and vendor) in the plugin collections for this slot
@@ -172,11 +175,17 @@ function loadPlugin(kind, name, vendor) {
         var inserts = findChild(base, ['insert'], 3)
         if (inserts < 0) { send('E', 'Could not find the insert slots of ' + gTrackTitle + '.'); return }
         var n = childCount(inserts)
+        var seen = []
         for (var i = 0; i < n; ++i) {
             var s = child(inserts, i)
+            seen.push(typeOf(s) + ':"' + titleOf(s) + '"')
             if (isEmptySlot(s)) { slotID = s; where = 'insert ' + (i + 1); break }
         }
-        if (slotID < 0) { send('E', 'All insert slots on ' + gTrackTitle + ' are full.'); return }
+        if (slotID < 0) {
+            send('E', 'No free insert found on ' + gTrackTitle + '. Cubase shows ' + n + ' items under "' + typeOf(inserts) + '": '
+                      + seen.slice(0, 8).join(', '))
+            return
+        }
     }
 
     if (slotID < 0) { send('E', 'No free slot found on ' + gTrackTitle + '.'); return }
