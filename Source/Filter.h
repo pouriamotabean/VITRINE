@@ -35,7 +35,7 @@ namespace Filter
                 case ViewSel::favorites: ok = e.favorite; break;
                 case ViewSel::recent:    ok = e.lastUsed > 0; break;
                 case ViewSel::forgotten: ok = e.lastUsed == 0 || now - e.lastUsed > forgottenAfterMs; break;
-                case ViewSel::category:  ok = e.category() == v.name; break;
+                case ViewSel::category:  ok = e.inCategory (v.name); break;
                 case ViewSel::maker:     ok = e.maker == v.name; break;
                 case ViewSel::deck:      break;
                 case ViewSel::hidden:    ok = true; break;
@@ -52,6 +52,18 @@ namespace Filter
                 if (a->lastUsed != b->lastUsed) return a->lastUsed < b->lastUsed;
                 return a->name.compareNatural (b->name) < 0;
             });
+        else if (lib.sort == Library::Sort::leastUsed)
+            std::stable_sort (r.begin(), r.end(), [] (auto* a, auto* b)
+            {
+                if (a->useCount != b->useCount) return a->useCount < b->useCount;
+                return a->name.compareNatural (b->name) < 0;
+            });
+        else if (lib.sort == Library::Sort::mostUsed)
+            std::stable_sort (r.begin(), r.end(), [] (auto* a, auto* b)
+            {
+                if (a->useCount != b->useCount) return a->useCount > b->useCount;
+                return a->name.compareNatural (b->name) < 0;
+            });
         else
             std::sort (r.begin(), r.end(), [] (auto* a, auto* b) { return a->name.compareNatural (b->name) < 0; });
 
@@ -60,7 +72,7 @@ namespace Filter
 
     inline bool matchesSearch (const PluginEntry& e, const juce::StringArray& words)
     {
-        const auto hay = (e.name + " " + e.maker + " " + e.category()).toLowerCase();
+        const auto hay = (e.name + " " + e.maker + " " + e.categories().joinIntoString (" ")).toLowerCase();
         for (auto& w : words)
             if (! hay.contains (w))
                 return false;

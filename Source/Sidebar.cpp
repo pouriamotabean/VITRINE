@@ -342,7 +342,8 @@ void Sidebar::itemDragMove (const SourceDetails& d)
     int i = rowAt (d.localPosition.toInt());
     if (i >= 0 && ! (rows[(size_t) i].target.kind == ViewSel::deck && rows[(size_t) i].type == Row::item)
                && ! (rows[(size_t) i].type == Row::addDeck && d.description.toString().startsWith (dragPluginPrefix))
-               && ! (rows[(size_t) i].target.kind == ViewSel::favorites && d.description.toString().startsWith (dragPluginPrefix)))
+               && ! (rows[(size_t) i].target.kind == ViewSel::favorites && d.description.toString().startsWith (dragPluginPrefix))
+               && ! (rows[(size_t) i].target.kind == ViewSel::category && d.description.toString().startsWith (dragPluginPrefix)))
         i = -1;
     if (i != dropRow) { dropRow = i; repaint(); }
 }
@@ -378,6 +379,24 @@ void Sidebar::itemDropped (const SourceDetails& d)
     auto* e = library.find (id);
     if (e == nullptr)
         return;
+
+    if (r.target.kind == ViewSel::category)
+    {
+        const auto cat = r.target.name;
+        const bool also = juce::ModifierKeys::currentModifiers.isShiftDown() || juce::ModifierKeys::currentModifiers.isCtrlDown();
+        const auto name = e->name;
+        if (also)
+        {
+            if (! e->inCategory (cat)) library.toggleExtraCategory (id, cat);
+            if (onToast) onToast (name + " is now also in " + cat + ".");
+        }
+        else
+        {
+            library.moveToCategory (id, cat);
+            if (onToast) onToast (name + " moved to " + cat + ". (Hold Shift while dropping to keep it in both.)");
+        }
+        return;
+    }
 
     if (r.target.kind == ViewSel::favorites)
     {

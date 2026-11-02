@@ -7,8 +7,26 @@ namespace Thumbs
 {
     juce::File fileFor (const PluginEntry& e)
     {
+        // keyed by maker + name, so a plugin keeps its picture when an update installs it elsewhere
+        const auto key = (e.maker + "|" + e.name).toLowerCase().trim();
         return Library::dataFolder().getChildFile ("thumbs")
-                   .getChildFile (juce::String::toHexString (e.id.hashCode64()) + ".png");
+                   .getChildFile ("p_" + juce::String::toHexString (key.hashCode64()) + ".png");
+    }
+
+    void migrateOldFiles (const std::vector<PluginEntry>& items)
+    {
+        const auto dir = Library::dataFolder().getChildFile ("thumbs");
+        if (! dir.isDirectory()) return;
+        for (auto& e : items)
+        {
+            const auto oldFile = dir.getChildFile (juce::String::toHexString (e.id.hashCode64()) + ".png");
+            if (oldFile.existsAsFile())
+            {
+                const auto now = fileFor (e);
+                if (! now.existsAsFile()) oldFile.moveFileTo (now);
+                else oldFile.deleteFile();
+            }
+        }
     }
 
     bool hasPicture (const PluginEntry& e) { return fileFor (e).existsAsFile(); }

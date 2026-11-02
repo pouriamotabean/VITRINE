@@ -25,7 +25,19 @@ struct PluginEntry
     juce::int64 added = 0;
     int useCount = 0;
 
-    juce::String category() const { return userCategory.isNotEmpty() ? userCategory : autoCategory; }
+    juce::StringArray extraCategories;   // also shown in these categories
+    juce::StringArray hiddenFrom;        // hidden from these categories only
+
+    juce::String category() const { return userCategory.isNotEmpty() ? userCategory : autoCategory; }   // main one
+    juce::StringArray categories() const
+    {
+        juce::StringArray c;
+        c.add (category());
+        for (auto& x : extraCategories) c.addIfNotAlreadyThere (x);
+        for (auto& h : hiddenFrom) c.removeString (h);
+        return c;
+    }
+    bool inCategory (const juce::String& c) const { return categories().contains (c); }
 };
 
 struct Deck
@@ -66,12 +78,17 @@ public:
     void toggleFavorite (const juce::String& id);
     void setHidden (const juce::String& id, bool hidden);
     void setUserCategory (const juce::String& id, const juce::String& cat);
+    void moveToCategory (const juce::String& id, const juce::String& cat);     // only there
+    void toggleExtraCategory (const juce::String& id, const juce::String& cat); // also there / not any more
+    void hideFromCategory (const juce::String& id, const juce::String& cat);
     void markUsed (const juce::String& id);
 
     juce::StringArray allMakers() const;
     juce::StringArray extraFolders;      // extra VST3 search folders chosen by the user
     int cardWidth = 210;                 // card size in the big window
     int sidecarColumns = 2;              // columns in the narrow window
+    enum class Sort { name, leastUsed, mostUsed };
+    Sort sort = Sort::name;
 
     // demo data for screenshots / first look without a scan
     void fillDemo();

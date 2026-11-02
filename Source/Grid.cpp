@@ -78,7 +78,7 @@ void Grid::rebuild()
             case ViewSel::favorites: title = "FAVORITES"; break;
             case ViewSel::recent:    title = "RECENT"; break;
             case ViewSel::forgotten: title = "NOT USED IN 30 DAYS"; break;
-            case ViewSel::hidden:    title = "HIDDEN"; break;
+            case ViewSel::hidden:    title = "HIDDEN  -  click a card to bring it back"; break;
             case ViewSel::deck:      title = juce::isPositiveAndBelow (view.deckIndex, (int) library.decks().size())
                                                  ? library.decks()[(size_t) view.deckIndex].name : juce::String(); break;
             case ViewSel::category:
@@ -172,14 +172,24 @@ void Grid::paintCard (juce::Graphics& g, const Card& c, bool hot) const
     // text
     const bool tiny = b.getWidth() < 150.0f;
     auto tb = b.withTrimmedTop (thumb.getBottom() - b.getY() + (tiny ? 3.0f : 6.0f)).reduced (tiny ? 8.0f : 11.0f, 0.0f).withHeight (tiny ? 34.0f : textH - 10.0f);
-    if (! tiny)
+    // how many times it was loaded through Vitrine (0 = never: dimmed)
     {
-        auto tag = tb.removeFromRight (40.0f).withSizeKeepingCentre (38.0f, 20.0f);
-        g.setColour (Theme::line);
-        g.fillRoundedRectangle (tag, 4.0f);
-        g.setColour (Theme::dim);
-        g.setFont (Theme::font (10.5f, true));
-        g.drawText (e.format, tag, juce::Justification::centred);
+        const auto count = juce::String (e.useCount) + "x";
+        auto cb = tb.removeFromRight (tiny ? 26.0f : 40.0f).withSizeKeepingCentre (tiny ? 26.0f : 38.0f, tiny ? 16.0f : 20.0f);
+        if (e.useCount > 0)
+        {
+            g.setColour (Theme::accent.withAlpha (0.14f));
+            g.fillRoundedRectangle (cb, 4.0f);
+            g.setColour (Theme::accent);
+        }
+        else
+        {
+            g.setColour (Theme::line);
+            g.fillRoundedRectangle (cb, 4.0f);
+            g.setColour (Theme::faint);
+        }
+        g.setFont (Theme::font (tiny ? 9.5f : 11.0f, true));
+        g.drawText (count, cb, juce::Justification::centred);
     }
 
     const bool small = tiny;
@@ -188,7 +198,8 @@ void Grid::paintCard (juce::Graphics& g, const Card& c, bool hot) const
     g.drawText (e.name, tb.removeFromTop (tiny ? 17.0f : 20.0f), juce::Justification::centredLeft, true);
     g.setColour (Theme::dim);
     g.setFont (Theme::font (small ? 11.0f : 12.5f));
-    g.drawText (e.maker.isNotEmpty() ? e.maker : e.category(), tb.removeFromTop (tiny ? 15.0f : 18.0f), juce::Justification::centredLeft, true);
+    g.drawText ((e.maker.isNotEmpty() ? e.maker : e.category()) + (tiny ? juce::String() : "   " + e.format),
+                tb.removeFromTop (tiny ? 15.0f : 18.0f), juce::Justification::centredLeft, true);
 
     if (hot)
     {
@@ -362,19 +373,25 @@ void Grid::cardMenu (Card& c)
     if (view.kind == ViewSel::deck && searchText.isEmpty())
         m.addItem (2, "Remove from this deck");
 
-    juce::PopupMenu cats;
     const auto all = Categories::all();
+    juce::PopupMenu moveTo, alsoIn;
     for (int i = 0; i < all.size(); ++i)
-        cats.addItem (200 + i, all[i], true, e.category() == all[i]);
-    if (e.userCategory.isNotEmpty())
     {
-        cats.addSeparator();
-        cats.addItem (3, "Back to automatic (" + e.autoCategory + ")");
+        moveTo.addItem (200 + i, all[i], true, e.categories().size() == 1 && e.inCategory (all[i]));
+        alsoIn.addItem (300 + i, all[i], true, e.inCategory (all[i]));
     }
-    m.addSubMenu ("Category", cats);
+    if (e.userCategory.isNotEmpty() || ! e.extraCategories.isEmpty() || ! e.hiddenFrom.isEmpty())
+    {
+        moveTo.addSeparator();
+        moveTo.addItem (3, "Back to automatic (" + e.autoCategory + ")");
+    }
+    m.addSubMenu ("Move to category", moveTo);
+    m.addSubMenu ("Show in categories (tick several)", alsoIn);
 
     m.addItem (4, "Show in folder", juce::File (e.path).exists());
-    m.addItem (6, e.hidden ? "Show again" : "Hide from Vitrine");
+    if (view.kind == ViewSel::category && searchText.isEmpty() && ! e.hidden)
+        m.addItem (10, "Hide from " + view.name + " only");
+    m.addItem (6, e.hidden ? "Show again" : "Hide everywhere");
     m.addSeparator();
     m.addItem (7, e.format == "VST3" ? "Take picture of its window" : "Take picture (VST3 only)", e.format == "VST3");
     m.addItem (8, "Use an image file as picture...");
@@ -384,7 +401,8 @@ void Grid::cardMenu (Card& c)
 
     juce::Component::SafePointer<Grid> safe (this);
     const int deckView = view.kind == ViewSel::deck ? view.deckIndex : -1;
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safe, id, all, deckView] (int r)
+    const auto catView = view.kind == ViewSel::category ? view.name : juce::String();
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safe, id, all, deckView, catView] (int r)
     {
         if (safe == nullptr || r == 0) return;
         auto& lib = safe->library;
@@ -393,7 +411,18 @@ void Grid::cardMenu (Card& c)
 
         if (r == 1) lib.toggleFavorite (id);
         else if (r == 2 && deckView >= 0) lib.removeFromDeck (deckView, id);
-        else if (r == 3) lib.setUserCategory (id, en->autoCategory);
+        else if (r == 3)
+        {
+            en->extraCategories.clear();
+            en->hiddenFrom.clear();
+            lib.setUserCategory (id, en->autoCategory);
+        }
+        else if (r == 10 && catView.isNotEmpty())
+        {
+            const auto name = en->name;
+            lib.hideFromCategory (id, catView);
+            if (safe->onToast) safe->onToast (name + " hidden from " + catView + ". Still everywhere else.");
+        }
         else if (r == 4) juce::File (en->path).revealToUser();
         else if (r == 7) { if (safe->onTakePicture) safe->onTakePicture (id); }
         else if (r == 8) { if (safe->onChoosePicture) safe->onChoosePicture (id); }
@@ -404,7 +433,7 @@ void Grid::cardMenu (Card& c)
             const auto name = en->name;
             lib.setHidden (id, hide);
             if (safe->onToast)
-                safe->onToast (hide ? name + " hidden. Find it again under Hidden on the left."
+                safe->onToast (hide ? name + " hidden everywhere. More > Hidden plugins brings it back."
                                     : name + " is back.");
         }
         else if (r == 99)
@@ -414,7 +443,9 @@ void Grid::cardMenu (Card& c)
             if (safe->onToast) safe->onToast ("New deck made with " + en->name + ". Double-click its name to rename it.");
         }
         else if (r >= 200 && r < 200 + all.size())
-            lib.setUserCategory (id, all[r - 200]);
+            lib.moveToCategory (id, all[r - 200]);
+        else if (r >= 300 && r < 300 + all.size())
+            lib.toggleExtraCategory (id, all[r - 300]);
         else if (r >= 100 && r < 200)
         {
             const int d = r - 100;

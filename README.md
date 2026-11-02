@@ -2,6 +2,13 @@
 
 A visual shelf for your plugins, by Pouria Motabean. Every plugin and instrument as a card, sorted automatically, plus your own decks.
 
+## Version 0.5.0
+
+- **Categories**: drag a card onto a category on the left to move it there; hold **Shift** while dropping to keep it in both. Right-click a card: "Move to category" or "Show in categories" (tick several).
+- **Hide from one category only** (right-click a card inside a category), or **Hide everywhere**. More > "Hidden plugins" (also in Sidecar's "..." menu) shows them; click a card there to bring it back.
+- **Use counter** on every card: how many times it was loaded through Vitrine (0 = never, dimmed). More > Sort > "Least used first" brings forgotten plugins to the front.
+- Pictures are now linked to the plugin's maker + name, so they survive plugin updates that install elsewhere. Existing pictures are moved over automatically; nothing is photographed again.
+
 ## Version 0.4.0
 
 - **Pictures**: More > "Take pictures of all plugins". Each VST3 plugin is opened by a helper process for a few seconds and its window is photographed (also GPU-drawn ones). A plugin that fails (black window, licence popup, crash) keeps its icon card and is not retried until you choose "Retake pictures that failed".

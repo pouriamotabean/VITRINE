@@ -87,7 +87,17 @@ MainComponent::MainComponent (Library& lib, bool scanNow)
     sidebar.onToast = [this] (const juce::String& s) { showToast (s); };
 
     grid.onToast = [this] (const juce::String& s) { showToast (s); };
-    grid.onActivate = [this] (PluginEntry& e, bool alt) { loadIntoCubase (e, alt); };
+    grid.onActivate = [this] (PluginEntry& e, bool alt)
+    {
+        if (view.kind == ViewSel::hidden)
+        {
+            const auto name = e.name;
+            library.setHidden (e.id, false);
+            showToast (name + " is back.");
+            return;
+        }
+        loadIntoCubase (e, alt);
+    };
     grid.onTakePicture = [this] (const juce::String& id)
     {
         if (auto* e = library.find (id)) { e->noPicture = false; Thumbs::fileFor (*e).deleteFile(); }
@@ -199,6 +209,8 @@ void MainComponent::rebuildViewBox()
     add ("Favorites", { ViewSel::favorites });
     add ("Recent", { ViewSel::recent });
     add ("Not used lately", { ViewSel::forgotten });
+    if (! Filter::pluginsFor (library, { ViewSel::hidden }).empty())
+        add ("Hidden plugins", { ViewSel::hidden });
 
     if (! library.decks().empty())
     {
@@ -374,6 +386,17 @@ void MainComponent::showMainMenu()
     m.addItem (4, "Retake pictures that failed", picProc == nullptr);
     if (picProc != nullptr) m.addItem (5, "Stop taking pictures");
     m.addSeparator();
+    {
+        int nh = 0;
+        for (auto& e : library.plugins()) if (e.hidden) ++nh;
+        m.addItem (7, "Hidden plugins (" + juce::String (nh) + ")", nh > 0);
+    }
+    juce::PopupMenu sortMenu;
+    sortMenu.addItem (20, "By name", true, library.sort == Library::Sort::name);
+    sortMenu.addItem (21, "Least used first", true, library.sort == Library::Sort::leastUsed);
+    sortMenu.addItem (22, "Most used first", true, library.sort == Library::Sort::mostUsed);
+    m.addSubMenu ("Sort", sortMenu);
+    m.addSeparator();
     m.addItem (6, "Open Vitrine's data folder");
 
     juce::Component::SafePointer<MainComponent> safe (this);
@@ -393,6 +416,13 @@ void MainComponent::showMainMenu()
         }
         if (r == 5) safe->stopPictures();
         if (r == 6) Library::dataFolder().startAsProcess();
+        if (r == 7) { safe->view = { ViewSel::hidden }; safe->search.clear(); safe->applyView(); }
+        if (r >= 20 && r <= 22)
+        {
+            safe->library.sort = (Library::Sort) (r - 20);
+            safe->library.saveSoon();
+            safe->applyView();
+        }
     });
 }
 
@@ -647,6 +677,16 @@ void MainComponent::showMoreMenu()
     m.addItem (3, "New deck");
     m.addItem (4, "Take pictures of all plugins...", picProc == nullptr);
     if (picProc != nullptr) m.addItem (5, "Stop taking pictures");
+    {
+        int nh = 0;
+        for (auto& e : library.plugins()) if (e.hidden) ++nh;
+        m.addItem (7, "Hidden plugins (" + juce::String (nh) + ")", nh > 0);
+    }
+    juce::PopupMenu sortMenu;
+    sortMenu.addItem (20, "By name", true, library.sort == Library::Sort::name);
+    sortMenu.addItem (21, "Least used first", true, library.sort == Library::Sort::leastUsed);
+    sortMenu.addItem (22, "Most used first", true, library.sort == Library::Sort::mostUsed);
+    m.addSubMenu ("Sort", sortMenu);
     juce::PopupMenu cols;
     for (int n = 1; n <= 3; ++n)
         cols.addItem (2000 + n, juce::String (n) + (n == 1 ? " column" : " columns"), true, library.sidecarColumns == n);
@@ -666,6 +706,13 @@ void MainComponent::showMoreMenu()
         if (r == 3) safe->sidebar.newDeck();
         if (r == 4) safe->startPictures ({}, true);
         if (r == 5) safe->stopPictures();
+        if (r == 7) { safe->view = { ViewSel::hidden }; safe->search.clear(); safe->applyView(); }
+        if (r >= 20 && r <= 22)
+        {
+            safe->library.sort = (Library::Sort) (r - 20);
+            safe->library.saveSoon();
+            safe->applyView();
+        }
     });
 }
 

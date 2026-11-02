@@ -1,5 +1,6 @@
 #include "Library.h"
 #include "Categories.h"
+#include "Thumbs.h"
 
 namespace
 {
@@ -26,6 +27,11 @@ namespace
         o->setProperty ("lastUsed", e.lastUsed);
         o->setProperty ("added", e.added);
         o->setProperty ("useCount", e.useCount);
+        juce::Array<juce::var> ex, hf;
+        for (auto& x : e.extraCategories) ex.add (x);
+        for (auto& x : e.hiddenFrom) hf.add (x);
+        o->setProperty ("extraCategories", ex);
+        o->setProperty ("hiddenFrom", hf);
         return juce::var (o);
     }
 
@@ -52,6 +58,8 @@ namespace
         e.lastUsed     = (juce::int64) v["lastUsed"];
         e.added        = (juce::int64) v["added"];
         e.useCount     = (int) v["useCount"];
+        if (auto* a = v["extraCategories"].getArray()) for (auto& x : *a) e.extraCategories.add (x.toString());
+        if (auto* a = v["hiddenFrom"].getArray())      for (auto& x : *a) e.hiddenFrom.add (x.toString());
         return e;
     }
 }
@@ -95,6 +103,9 @@ void Library::load()
             deckList.push_back (d);
         }
 
+    if (root.hasProperty ("sort"))
+        sort = (Sort) juce::jlimit (0, 2, (int) root["sort"]);
+
     if (root.hasProperty ("sidecarColumns"))
         sidecarColumns = juce::jlimit (1, 3, (int) root["sidecarColumns"]);
 
@@ -104,6 +115,8 @@ void Library::load()
     if (auto* arr = root["extraFolders"].getArray())
         for (auto& v : *arr)
             extraFolders.add (v.toString());
+
+    Thumbs::migrateOldFiles (items);
 
     // re-run the guesser so improvements to it reach old libraries
     for (auto& e : items)
@@ -141,6 +154,7 @@ void Library::save()
     root->setProperty ("extraFolders", fs);
     root->setProperty ("cardWidth", cardWidth);
     root->setProperty ("sidecarColumns", sidecarColumns);
+    root->setProperty ("sort", (int) sort);
 
     const auto file = dataFolder().getChildFile ("library.json");
     const auto tmp  = file.getSiblingFile ("library.json.tmp");
@@ -299,6 +313,48 @@ void Library::setHidden (const juce::String& id, bool h)
     if (auto* e = find (id))
     {
         e->hidden = h;
+        sendChangeMessage();
+        saveSoon();
+    }
+}
+
+void Library::moveToCategory (const juce::String& id, const juce::String& cat)
+{
+    if (auto* e = find (id))
+    {
+        e->userCategory = (cat == e->autoCategory) ? juce::String() : cat;
+        e->extraCategories.clear();
+        e->hiddenFrom.removeString (cat);
+        sendChangeMessage();
+        saveSoon();
+    }
+}
+
+void Library::toggleExtraCategory (const juce::String& id, const juce::String& cat)
+{
+    if (auto* e = find (id))
+    {
+        if (e->inCategory (cat))
+        {
+            if (cat == e->category()) e->hiddenFrom.addIfNotAlreadyThere (cat);   // main one: hide it there
+            else e->extraCategories.removeString (cat);
+        }
+        else
+        {
+            e->hiddenFrom.removeString (cat);
+            if (cat != e->category()) e->extraCategories.addIfNotAlreadyThere (cat);
+        }
+        sendChangeMessage();
+        saveSoon();
+    }
+}
+
+void Library::hideFromCategory (const juce::String& id, const juce::String& cat)
+{
+    if (auto* e = find (id))
+    {
+        e->extraCategories.removeString (cat);
+        if (cat == e->category()) e->hiddenFrom.addIfNotAlreadyThere (cat);
         sendChangeMessage();
         saveSoon();
     }
